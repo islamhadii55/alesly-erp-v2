@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set title = "أرشيف إغلاق " + closure.closing_date %}
+{% block actions %}
+<button class="btn btn-gold no-print" onclick="window.print()">طباعة الأرشيف</button>
+<a class="btn btn-ghost no-print" href="{{ url_for('treasury') }}">رجوع للخزينة</a>
+{% endblock %}
+{% block content %}
+<div class="invoice-print">
+  <div class="inv-head">
+    <div class="print-brand">
+      <img class="print-logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="">
+      <div>
+        <h2 style="margin:0">{{ settings.get('shop_name', APP_NAME) }}</h2>
+        <div class="muted">إغلاق يومية {{ closure.closing_date }}</div>
+      </div>
+    </div>
+    <div>أغلقه: {{ closure.closed_by }}<br>{{ closure.closed_at }}</div>
+  </div>
+  <div class="cards">
+    <div class="card kpi"><div class="label">مبيعات</div><div class="value">{{ closure.sales_total|money }}</div></div>
+    <div class="card kpi"><div class="label">نقد محصّل</div><div class="value">{{ closure.sales_cash|money }}</div></div>
+    <div class="card kpi"><div class="label">مرتجعات</div><div class="value">{{ closure.returns_total|money }}</div></div>
+    <div class="card kpi"><div class="label">مشتريات</div><div class="value">{{ closure.purchases_total|money }}</div></div>
+    <div class="card kpi"><div class="label">مصروفات</div><div class="value">{{ closure.expenses_total|money }}</div></div>
+  </div>
+  <div class="cards">
+    <div class="card kpi"><div class="label">سندات قبض</div><div class="value">{{ closure.receipts_total|money }}</div></div>
+    <div class="card kpi"><div class="label">درج متوقع</div><div class="value">{{ closure.expected_cash|money }}</div></div>
+    <div class="card kpi"><div class="label">درج فعلي</div><div class="value">{{ closure.actual_cash|money }}</div></div>
+    <div class="card kpi"><div class="label">الفرق</div><div class="value {% if closure.difference %}down{% endif %}">{{ closure.difference|money }}</div></div>
+    <div class="card kpi"><div class="label">عدد الفواتير</div><div class="value">{{ closure.invoice_count }}</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>فواتير اليوم</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>الرقم</th><th>النوع</th><th>الطرف</th><th>الحالة</th><th>الإجمالي</th><th>المدفوع</th></tr>
+        {% for r in invoices %}
+        <tr>
+          <td><a href="{{ url_for('invoice_view', inv_id=r.id) }}">{{ r.number }}</a></td>
+          <td>{{ KIND_LABELS.get(r.kind, r.kind) }}</td>
+          <td>{{ r.party_name }}</td>
+          <td>{{ r.status }}</td>
+          <td class="money">{{ r.total|money }}</td>
+          <td class="money">{{ r.paid|money }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">لا فواتير</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>إيصالات اليوم</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>الرقم</th><th>الطرف</th><th>المبلغ</th><th>طريقة</th><th>بيان</th></tr>
+        {% for p in receipts %}
+        <tr>
+          <td><a href="{{ url_for('receipt_print', pay_id=p.id) }}">{{ p.receipt_no or p.id }}</a></td>
+          <td>{{ p.party_name }}</td>
+          <td class="money">{{ p.amount|money }}</td>
+          <td>{{ p.method }}</td>
+          <td>{{ p.notes }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">لا إيصالات</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  {% if closure.notes %}<p class="muted">ملاحظات: {{ closure.notes }}</p>{% endif %}
+</div>
+{% endblock %}

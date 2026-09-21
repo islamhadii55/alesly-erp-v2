@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% set title = KIND_LABELS[kind] %}
+{% block actions %}
+<a class="btn btn-gold" href="{{ url_for('invoice_new', kind=kind) }}">مستند جديد</a>
+{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="panel-h"><h3>{{ KIND_LABELS[kind] }}</h3>
+    <input data-suggest="invoice" placeholder="بحث برقم الفاتورة أو اسم العميل">
+  </div>
+  <div class="panel-b">
+    <table>
+      <tr><th>الرقم</th><th>التاريخ</th><th>الطرف</th><th>الحالة</th><th>الإجمالي</th><th>المدفوع</th><th>التكلفة</th><th>الربح/الخسارة</th><th></th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.number }}</td>
+        <td>{{ r.date }}</td>
+        <td>{{ r.party_name }}</td>
+          <td><span class="badge {% if r.status=='ملغاة' %}b-void{% elif r.status=='نقدي' %}b-paid{% elif r.status=='آجل' %}b-credit{% else %}b-open{% endif %}">{{ r.status }}</span></td>
+        <td class="money">{{ r.total|money }}</td>
+        <td class="money">{{ r.paid|money }}</td>
+        <td class="money">{{ r.cost_total|money }}</td>
+        <td class="money {% if r.profit>=0 %}up{% else %}down{% endif %}">{{ r.profit|money }}</td>
+          <td class="actions">
+          <a class="btn btn-ghost" href="{{ url_for('invoice_view', inv_id=r.id) }}">عرض</a>
+          <a class="btn btn-navy" href="{{ url_for('invoice_print', inv_id=r.id) }}">طباعة</a>
+          {% if r.status != 'ملغاة' and kind=='sale' %}
+          <a class="btn btn-ok" href="{{ url_for('invoice_new', kind='sale_return') }}?from={{ r.id }}">مرتجع</a>
+          {% elif r.status != 'ملغاة' and kind=='purchase' %}
+          <a class="btn btn-ok" href="{{ url_for('invoice_new', kind='purchase_return') }}?from={{ r.id }}">مرتجع</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">لا توجد مستندات. أنشئ مستنداً جديداً.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

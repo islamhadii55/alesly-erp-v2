@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% set title = "نواقص المخزون" %}
+{% block actions %}
+<a class="btn btn-ghost" href="{{ url_for('inventory') }}">المخزون</a>
+{% if can('purchases') %}
+<a class="btn btn-gold" href="{{ url_for('invoice_new', kind='purchase') }}">فاتورة شراء للنواقص</a>
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">إجمالي النواقص</div><div class="value down">{{ total_count }}</div></div>
+  <div class="card kpi"><div class="label">نافد بالكامل</div><div class="value down">{{ out_count }}</div></div>
+  <div class="card kpi"><div class="label">تحت حد الطلب</div><div class="value">{{ low_count }}</div></div>
+  <div class="card kpi"><div class="label">كمية مطلوبة للحد</div><div class="value">{{ needed_qty|money }}</div></div>
+  <div class="card kpi"><div class="label">تكلفة تغطية النقص</div><div class="value">{{ needed_value|money }}</div></div>
+</div>
+<div class="panel">
+  <div class="panel-h">
+    <h3>كل أصناف النقص تظهر هنا تلقائياً عند وصول الكمية لحد إعادة الطلب أو نفادها</h3>
+    <form method="get" class="actions" style="margin:0;gap:6px;flex-wrap:wrap">
+      <input name="q" value="{{ q or '' }}" data-suggest="product" placeholder="بحث في النواقص..." autocomplete="off">
+      <select name="status">
+        <option value="all" {% if status=='all' %}selected{% endif %}>الكل</option>
+        <option value="out" {% if status=='out' %}selected{% endif %}>نافد</option>
+        <option value="low" {% if status=='low' %}selected{% endif %}>تحت الحد</option>
+      </select>
+      <button class="btn btn-ghost">تصفية</button>
+    </form>
+  </div>
+  <div class="panel-b">
+    <table class="inv-table">
+      <thead>
+        <tr>
+          <th>الصنف</th>
+          <th>الحالة</th>
+          <th>الكمية الحالية</th>
+          <th>حد إعادة الطلب</th>
+          <th>المطلوب</th>
+          <th>المكان</th>
+          <th>تكلفة الوحدة</th>
+          <th>سعر البيع</th>
+          <th>تكلفة التغطية</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set need = r.min_qty - r.qty if r.min_qty > r.qty else 0 %}
+        <tr>
+          <td class="inv-product">
+            <div class="inv-tags">
+              <span class="pill pill-sku">SKU: {{ r.sku }}</span>
+              <span class="pill pill-cat">{{ r.category or 'بدون تصنيف' }}</span>
+            </div>
+            <div class="inv-name">{{ r.name }}</div>
+            <div class="muted">{{ r.brand or '' }} {% if r.car_model %}· {{ r.car_model }}{% endif %}</div>
+          </td>
+          <td>
+            {% if r.qty <= 0 %}
+            <span class="status status-out">نافد</span>
+            {% else %}
+            <span class="status status-low">تحت الحد</span>
+            {% endif %}
+          </td>
+          <td><span class="qty-cell"><span class="dot {{ 'dot-out' if r.qty<=0 else 'dot-low' }}"></span>{{ r.qty }} {{ r.unit }}</span></td>
+          <td>{{ r.min_qty }}</td>
+          <td class="money down">{{ need }}</td>
+          <td>{{ r.location or ([r.warehouse, r.aisle, r.shelf, r.bin]|select|join(' / ')) or '-' }}</td>
+          <td class="inv-money">{{ r.cost|money }}</td>
+          <td class="inv-money">{{ r.price|money }}</td>
+          <td class="inv-money">{{ (need * r.cost)|money }}</td>
+          <td class="actions">
+            <a class="btn btn-ghost" href="{{ url_for('inventory', edit=r.id) }}">تعديل</a>
+            {% if can('purchases') %}
+            <a class="btn btn-ok" href="{{ url_for('invoice_new', kind='purchase') }}">شراء</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10">لا توجد نواقص حالياً. كل الأصناف فوق حد إعادة الطلب.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

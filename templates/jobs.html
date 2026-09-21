@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set title = "أوامر الشغل - الورشة" %}
+{% block actions %}
+<a class="btn btn-gold" href="{{ url_for('job_new') }}">أمر شغل جديد</a>
+{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="panel-h"><h3>تتبع حالة الإصلاح</h3></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>الرقم</th><th>العميل</th><th>اللوحة</th><th>السيارة</th><th>العطل</th><th>الفني</th><th>الحالة</th><th>الإجمالي</th><th></th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.number }}</td>
+        <td>{{ r.customer_name }}</td>
+        <td>{{ r.plate }}</td>
+        <td>{{ r.vehicle_type }} {{ r.vehicle_model }}</td>
+        <td>{{ r.complaint }}</td>
+        <td>{{ r.technician_name }}</td>
+        <td><span class="badge {% if r.status=='تم التسليم' %}b-paid{% elif r.status=='جاري العمل' %}b-open{% elif r.status=='تم الإصلاح' %}b-credit{% else %}b-void{% endif %}">{{ r.status }}</span></td>
+        <td class="money">{{ r.total|money }}</td>
+        <td><a class="btn btn-ghost" href="{{ url_for('job_view', job_id=r.id) }}">فتح</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">لا أوامر شغل بعد.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

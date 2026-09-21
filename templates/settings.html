@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% set title = "الإعدادات" %}
+{% block content %}
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>المستخدمون والصلاحيات</h3></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid" style="margin-bottom:16px" id="add-user-form">
+        <input type="hidden" name="action" value="add_user">
+        <div class="field"><label>اسم المستخدم</label><input name="username" required></div>
+        <div class="field"><label>الاسم الكامل</label><input name="full_name" required></div>
+        <div class="field"><label>كلمة المرور</label><input type="password" name="password" required></div>
+        <div class="field"><label>الصلاحية</label>
+          <select name="role" id="add-role" onchange="togglePermBox('add-perms', this.value)">
+            <option>موظف</option>
+            <option>محاسب</option>
+            <option>مدير</option>
+          </select>
+        </div>
+        <div class="field full" id="add-perms">
+          <label>الشاشات المسموح بها</label>
+          <div class="perm-toolbar">
+            <button type="button" class="btn btn-ghost" onclick="setPerms('add-user-form', true)">تحديد الكل</button>
+            <button type="button" class="btn btn-ghost" onclick="setPerms('add-user-form', false)">إلغاء الكل</button>
+          </div>
+          {% for grp in perm_groups %}
+          <div class="perm-group">
+            <div class="perm-group-title">{{ grp.name }}</div>
+            <div class="perm-grid">
+              {% for p in grp.mods %}
+              <label class="perm-item"><input type="checkbox" name="permissions" value="{{ p.key }}"> {{ p.label }}</label>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div><button class="btn btn-gold">إضافة مستخدم</button></div>
+      </form>
+      <table>
+        <tr><th>المستخدم</th><th>الاسم</th><th>الصلاحية</th><th>الشاشات</th><th></th></tr>
+        {% for u in users %}
+        {% set raw = (u.permissions or '') %}
+        {% set is_admin = u.role == 'مدير' or raw == 'all' %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>{{ u.full_name }}</td>
+          <td><span class="badge {% if u.role=='مدير' %}b-credit{% else %}b-open{% endif %}">{{ u.role }}</span></td>
+          <td class="perm-cell">{% if is_admin %}كل الصلاحيات{% else %}{{ raw.replace(',', ' · ') or 'بدون' }}{% endif %}</td>
+          <td class="actions">
+            <button type="button" class="btn btn-navy" onclick="document.getElementById('edit-{{ u.id }}').classList.toggle('open')">تعديل</button>
+            {% if u.username != session.get('user') %}
+            <form method="post" style="margin:0;display:inline">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <button class="btn btn-danger" name="action" value="delete_user" onclick="return confirm('حذف المستخدم؟')">حذف</button>
+            </form>
+            {% else %}
+            <span class="muted">الحالي</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr class="edit-row" id="edit-{{ u.id }}">
+          <td colspan="5">
+            <form method="post" id="edit-form-{{ u.id }}">
+              <input type="hidden" name="action" value="update_user">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <div class="form-grid">
+                <div class="field"><label>الاسم الكامل</label><input name="full_name" value="{{ u.full_name }}" required></div>
+                <div class="field"><label>كلمة مرور جديدة</label><input type="password" name="password" placeholder="اتركها فارغة للإبقاء"></div>
+                <div class="field"><label>الدور</label>
+                  <select name="role" onchange="togglePermBox('edit-perms-{{ u.id }}', this.value)">
+                    <option {% if u.role=='موظف' %}selected{% endif %}>موظف</option>
+                    <option {% if u.role=='محاسب' %}selected{% endif %}>محاسب</option>
+                    <option {% if u.role=='مدير' %}selected{% endif %}>مدير</option>
+                  </select>
+                </div>
+              </div>
+              <div id="edit-perms-{{ u.id }}" {% if u.role=='مدير' %}style="display:none"{% endif %}>
+                <div class="perm-toolbar">
+                  <button type="button" class="btn btn-ghost" onclick="setPerms('edit-form-{{ u.id }}', true)">تحديد الكل</button>
+                  <button type="button" class="btn btn-ghost" onclick="setPerms('edit-form-{{ u.id }}', false)">إلغاء الكل</button>
+                </div>
+                {% for grp in perm_groups %}
+                <div class="perm-group">
+                  <div class="perm-group-title">{{ grp.name }}</div>
+                  <div class="perm-grid">
+                    {% for p in grp.mods %}
+                    <label class="perm-item">
+                      <input type="checkbox" name="permissions" value="{{ p.key }}"
+                        {% if is_admin or p.key in raw.split(',') %}checked{% endif %}>
+                      {{ p.label }}
+                    </label>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              <div style="margin-top:10px"><button class="btn btn-gold">حفظ الصلاحيات</button></div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>إعدادات الطباعة</h3></div>
+    <div class="panel-b">
+      <form method="post">
+        <input type="hidden" name="action" value="save_print">
+        <div class="field" style="margin-bottom:10px"><label>اسم المحل على الفاتورة</label><input name="shop_name" value="{{ settings.get('shop_name','') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>الوصف</label><input name="shop_subtitle" value="{{ settings.get('shop_subtitle','') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>الهاتف</label><input name="phone" value="{{ settings.get('phone','') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>العنوان</label><input name="address" value="{{ settings.get('address','') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>الرقم الضريبي</label><input name="tax_no" value="{{ settings.get('tax_no','') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>حجم الورق</label>
+          <select name="paper_size">
+            <option value="A4" {% if settings.get('paper_size')=='A4' %}selected{% endif %}>A4</option>
+            <option value="A5" {% if settings.get('paper_size')=='A5' %}selected{% endif %}>A5</option>
+            <option value="80mm" {% if settings.get('paper_size')=='80mm' %}selected{% endif %}>حراري 80مم</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label>عدد النسخ</label><input type="number" min="1" name="print_copies" value="{{ settings.get('print_copies','1') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>بادئة كود الصنف التلقائي</label><input name="sku_prefix" value="{{ settings.get('sku_prefix','PRD') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>نسبة الضريبة %</label><input name="vat_rate" value="{{ settings.get('vat_rate','15') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>نقاط الولاء لكل 100</label><input name="points_per_100" value="{{ settings.get('points_per_100','1') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>سعر ساعة المصنعية الافتراضي</label><input name="default_labor_rate" value="{{ settings.get('default_labor_rate','80') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>تذييل الفاتورة</label><input name="print_footer" value="{{ settings.get('print_footer','') }}"></div>
+        <label style="display:flex;gap:8px;align-items:center;margin:8px 0">
+          <input type="checkbox" name="show_cost" {% if settings.get('show_cost')=='1' %}checked{% endif %}> إظهار التكلفة في الطباعة
+        </label>
+        <label style="display:flex;gap:8px;align-items:center;margin:8px 0 14px">
+          <input type="checkbox" name="show_profit" {% if settings.get('show_profit')=='1' %}checked{% endif %}> إظهار الربح في الطباعة
+        </label>
+        <div class="field" style="margin-bottom:10px"><label>اسم هذا الجهاز للمزامنة</label><input name="device_name" value="{{ settings.get('device_name','جهاز المحل') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>رابط السيرفر السحابي (اختياري)</label><input name="sync_server_url" value="{{ settings.get('sync_server_url','') }}" placeholder="يُترك فارغاً للمزامنة المحلية بين الأجهزة عبر نفس السيرفر"></div>
+        <div class="field" style="margin-bottom:10px"><label>رمز المزامنة</label><input name="sync_token" value="{{ settings.get('sync_token','alasly-sync-local') }}"></div>
+        <label style="display:flex;gap:8px;align-items:center;margin:8px 0 14px">
+          <input type="checkbox" name="sync_enabled" {% if settings.get('sync_enabled','1')=='1' %}checked{% endif %}> تفعيل المزامنة التلقائية عند عودة الإنترنت
+        </label>
+        <button class="btn btn-navy">حفظ إعدادات الطباعة والمزامنة</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function setPerms(formId, on) {
+  document.querySelectorAll('#' + formId + ' input[name="permissions"]').forEach(function (el) { el.checked = on; });
+}
+function togglePermBox(id, role) {
+  var box = document.getElementById(id);
+  if (!box) return;
+  box.style.display = role === 'مدير' ? 'none' : '';
+}
+</script>
+{% endblock %}

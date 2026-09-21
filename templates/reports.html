@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set title = "التقارير واللوحة الإحصائية" %}
+{% block actions %}
+<a class="btn {% if period=='day' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='day') }}">يومي</a>
+<a class="btn {% if period=='month' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='month') }}">شهري</a>
+<a class="btn {% if period=='year' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='year') }}">سنوي</a>
+{% endblock %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">مبيعات {{ label }}</div><div class="value">{{ sales.s|money }}</div><div class="hint up">مجمل ربح {{ sales.p|money }}</div></div>
+  <div class="card kpi"><div class="label">مشتريات</div><div class="value">{{ purchases.s|money }}</div></div>
+  <div class="card kpi"><div class="label">مصروفات + رواتب</div><div class="value">{{ (expenses_v + salaries_v)|money }}</div></div>
+  <div class="card kpi"><div class="label">صافي الدخل</div><div class="value {% if net>=0 %}up{% else %}down{% endif %}">{{ net|money }}</div></div>
+</div>
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>الأكثر مبيعاً</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>الصنف</th><th>كمية</th><th>مبيعات</th><th>ربح</th></tr>
+        {% for r in top_qty %}
+        <tr><td>{{ r.sku }} {{ r.name }}</td><td>{{ r.qty }}</td><td>{{ r.sales|money }}</td><td class="up">{{ r.profit|money }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>الأكثر ربحية</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>الصنف</th><th>كمية</th><th>مبيعات</th><th>ربح</th></tr>
+        {% for r in top_profit %}
+        <tr><td>{{ r.sku }} {{ r.name }}</td><td>{{ r.qty }}</td><td>{{ r.sales|money }}</td><td class="up">{{ r.profit|money }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+<div class="split" style="margin-top:14px">
+  <div class="panel">
+    <div class="panel-h"><h3>مديونيات العملاء</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>العميل</th><th>الرصيد</th><th>نقاط</th></tr>
+        {% for r in customers %}
+        <tr><td>{{ r.name }}</td><td class="down money">{{ r.balance|money }}</td><td>{{ r.points or 0 }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>مديونيات الموردين</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>المورد</th><th>الرصيد</th></tr>
+        {% for r in suppliers %}
+        <tr><td>{{ r.name }}</td><td class="down money">{{ r.balance|money }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

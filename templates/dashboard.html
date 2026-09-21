@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block bodyclass %}dash-theme{% endblock %}
+{% set title = "لوحة التحكم" %}
+{% block actions %}
+<span class="dash-header-actions">
+  <a class="dash-btn dash-btn-primary" href="{{ url_for('pos') }}">كاشير</a>
+  <a class="dash-btn dash-btn-ghost" href="{{ url_for('job_new') }}">أمر شغل</a>
+  <a class="dash-btn dash-btn-ghost" href="{{ url_for('invoice_new', kind='purchase') }}">فاتورة شراء</a>
+</span>
+{% endblock %}
+{% block content %}
+<div class="dashboard-page">
+
+  <section class="dash-company">
+    <div class="dash-company-glow dash-company-glow-a"></div>
+    <div class="dash-company-glow dash-company-glow-b"></div>
+    <div class="dash-company-fields">
+      <div class="dash-company-field">
+        <span class="dash-company-label">الشركة</span>
+        <span class="dash-company-name">{{ APP_NAME }}</span>
+      </div>
+      <span class="dash-company-divider"></span>
+      <div class="dash-company-field">
+        <span class="dash-company-label">كود المنشأة</span>
+        <span class="dash-company-code">{{ client_code }}</span>
+      </div>
+      <span class="dash-company-divider"></span>
+      <div class="dash-company-field">
+        <span class="dash-company-label">التاريخ</span>
+        <span class="dash-company-date">{{ today }}</span>
+      </div>
+      <span class="dash-company-divider"></span>
+      <div class="dash-company-field">
+        <span class="dash-company-label">المستخدم</span>
+        <span class="dash-company-date">{{ session.get('full_name', user) }} — {{ role or '' }}</span>
+      </div>
+    </div>
+    <div class="dash-company-side">
+      <span class="dash-status-pill">
+        {% if open_shift %}وردية مفتوحة{% else %}لا وردية{% endif %}
+      </span>
+    </div>
+  </section>
+
+  <section class="analytical-kpi-grid">
+    <article class="kpi-card">
+      <span class="kpi-card-title">إجمالي الأصناف</span>
+      <strong class="kpi-card-value">{{ total_items }}</strong>
+      <span class="kpi-card-sub">{{ total_qty|money }} وحدة بالمخزون</span>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-card-title">تنبيهات نقص المخزون</span>
+      <strong class="kpi-card-value kpi-danger"><a href="{{ url_for('inventory_shortages') }}">{{ low_count }}</a></strong>
+      <span class="kpi-card-sub">منها {{ out_count }} صنف نافد — <a href="{{ url_for('inventory_shortages') }}">عرض النواقص</a></span>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-card-title">الموردون</span>
+      <strong class="kpi-card-value">{{ suppliers_count }}</strong>
+      <span class="kpi-card-sub">مستحق لهم {{ suppliers_due|money }}</span>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-card-title">قيمة المخزون بالتكلفة</span>
+      <strong class="kpi-card-value kpi-accent">{{ stock_value|money }}</strong>
+      <span class="kpi-card-sub">{{ customers_count }} عميل مسجل</span>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-card-title">مبيعات الشهر</span>
+      <strong class="kpi-card-value kpi-success">{{ month_sales.s|money }}</strong>
+      <span class="kpi-card-sub">ربح {{ month_sales.p|money }}</span>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-card-title">رصيد الخزينة</span>
+      <strong class="kpi-card-value">{{ cash_balance|money }}</strong>
+      <span class="kpi-card-sub">مشتريات الشهر {{ month_purchases.s|money }}</span>
+    </article>
+  </section>
+
+  <section class="analytical-middle-row">
+    <div class="chart-panel">
+      <div class="chart-panel-header">حركة المبيعات والمشتريات — آخر 12 شهراً</div>
+      <div class="dash-chart" data-chart="line" data-height="300">
+        <script type="application/json">
+        {
+          "labels": {{ chart_data['labels']|tojson }},
+          "series": [
+            {"name": "المبيعات والصيانة", "color": "#1976d2", "values": {{ chart_data['sales']|tojson }}},
+            {"name": "المشتريات", "color": "#0f766e", "values": {{ chart_data['purchases']|tojson }}}
+          ]
+        }
+        </script>
+      </div>
+    </div>
+    <div class="chart-panel">
+      <div class="chart-panel-header">دخول وخروج المخزون</div>
+      <div class="dash-chart" data-chart="line" data-height="300">
+        <script type="application/json">
+        {
+          "labels": {{ chart_data['labels']|tojson }},
+          "series": [
+            {"name": "وارد", "color": "#0f766e", "values": {{ chart_data['stockIn']|tojson }}},
+            {"name": "صادر", "color": "#b45309", "values": {{ chart_data['stockOut']|tojson }}}
+          ]
+        }
+        </script>
+      </div>
+    </div>
+  </section>
+
+  <section class="analytical-bottom-row">
+    <div class="chart-panel">
+      <div class="chart-panel-header"><a href="{{ url_for('inventory_shortages') }}">تنبيه نقص المخزون</a></div>
+      <div class="summary-list">
+        {% for r in low[:6] %}
+        <div class="summary-item summary-item--danger">
+          <span class="summary-name">{{ r.name }}</span>
+          <span class="summary-amount">{{ r.qty }} / {{ r.min_qty }}</span>
+        </div>
+        {% else %}
+        <div class="summary-item summary-item--success">
+          <span class="summary-name">المخزون ضمن الحدود</span>
+          <span class="summary-amount">—</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-panel-header">أعلى مديونيات العملاء</div>
+      <div class="summary-list">
+        {% for r in top_debtors %}
+        <div class="summary-item summary-item--warning">
+          <span class="summary-name">{{ r.name }}</span>
+          <span class="summary-amount">{{ r.balance|money }}</span>
+        </div>
+        {% else %}
+        <div class="summary-item">
+          <span class="summary-name">لا مديونيات</span>
+          <span class="summary-amount">—</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-panel-header">القطع الأكثر مبيعاً</div>
+      <div class="summary-list">
+        {% for r in top_parts[:6] %}
+        <div class="summary-item summary-item--success">
+          <span class="summary-name">{{ r.name }}</span>
+          <span class="summary-amount">{{ r.qty }} · {{ r.profit|money }}</span>
+        </div>
+        {% else %}
+        <div class="summary-item">
+          <span class="summary-name">لا مبيعات بعد</span>
+          <span class="summary-amount">—</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="chart-panel">
+    <div class="chart-panel-header">آخر العمليات</div>
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead>
+          <tr><th>الرقم</th><th>النوع</th><th>الطرف</th><th>الإجمالي</th><th>الربح</th></tr>
+        </thead>
+        <tbody>
+          {% for r in recent %}
+          <tr>
+            <td><a href="{{ url_for('invoice_view', inv_id=r.id) }}">{{ r.number }}</a></td>
+            <td>{{ KIND_LABELS.get(r.kind, r.kind) }}</td>
+            <td>{{ r.party_name }}</td>
+            <td class="money">{{ r.total|money }}</td>
+            <td class="money {% if r.profit>=0 %}up{% else %}down{% endif %}">{{ r.profit|money }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">لا توجد عمليات بعد. ابدأ بفاتورة بيع أو شراء.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% endblock %}

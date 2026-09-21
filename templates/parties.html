@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>{{ 'تعديل' if edit else 'إضافة' }}</h3></div>
+  <div class="panel-b">
+    <form method="post" class="form-grid">
+      {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+      <div class="field"><label>الاسم</label><input name="name" value="{{ edit.name if edit else '' }}" data-suggest="{{ 'customer' if endpoint=='customers' else 'supplier' }}" required></div>
+      <div class="field"><label>الجوال</label><input name="phone" value="{{ edit.phone if edit else '' }}"></div>
+      <div class="field"><label>الرقم الضريبي</label><input name="tax_no" value="{{ edit.tax_no if edit else '' }}"></div>
+      <div class="field full"><label>العنوان</label><input name="address" value="{{ edit.address if edit else '' }}"></div>
+      <div class="field"><label>حد الائتمان</label><input name="credit_limit" type="number" step="0.01" value="{{ edit.credit_limit if edit else 0 }}"></div>
+      <div class="field"><label>أجل السداد (يوم)</label><input name="payment_term_days" type="number" value="{{ edit.payment_term_days if edit else 0 }}"></div>
+      <div class="field"><label>الخصم %</label><input name="discount_percent" type="number" step="0.01" value="{{ edit.discount_percent if edit else 0 }}"></div>
+      <div class="field full" style="border:1px dashed var(--line);border-radius:2px;padding:8px 10px;background:#f7fafd">
+        <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink)">
+          {% if endpoint=='customers' %}
+          <input type="checkbox" name="is_supplier" value="1" {% if edit and edit.is_supplier %}checked{% endif %}
+                 style="width:auto">
+          {% else %}
+          <input type="checkbox" name="is_customer" value="1" {% if edit and edit.is_customer %}checked{% endif %}
+                 style="width:auto">
+          {% endif %}
+          {{ dual_label }}
+        </label>
+        <small class="muted">عند التفعيل يُنشأ سجل مرتبط في القائمة الأخرى بنفس الاسم والبيانات، ويمكن استخدامه في فواتير الطرفين.</small>
+      </div>
+      <div class="field full"><label>ملاحظات</label><input name="notes" value="{{ edit.notes if edit else '' }}"></div>
+      <div><button class="btn btn-gold">حفظ</button>{% if edit %}<a class="btn btn-ghost" href="{{ url_for(endpoint) }}">إلغاء</a>{% endif %}</div>
+    </form>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-h"><h3>القائمة</h3></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>الاسم</th><th>النوع</th><th>الجوال</th><th>العنوان</th><th>الرصيد</th>{% if endpoint=='customers' %}<th>نقاط</th>{% endif %}<th>حد ائتمان</th><th></th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td>
+          {% if endpoint=='customers' %}
+            <span class="badge b-open">عميل</span>
+            {% if r.is_supplier %}<span class="badge b-credit">مورد</span>{% endif %}
+          {% else %}
+            <span class="badge b-open">مورد</span>
+            {% if r.is_customer %}<span class="badge b-credit">عميل</span>{% endif %}
+          {% endif %}
+        </td>
+        <td>{{ r.phone }}</td>
+        <td>{{ r.address }}</td>
+        <td class="money {% if r.balance>0 %}down{% endif %}">{{ r.balance|money }}</td>
+        {% if endpoint=='customers' %}<td>{{ r.points or 0 }}</td>{% endif %}
+        <td>{{ r.credit_limit|money }}</td>
+        <td class="actions">
+          <a class="btn btn-ghost" href="{{ url_for(endpoint, edit=r.id) }}">تعديل</a>
+          {% if endpoint=='customers' %}
+          <a class="btn btn-danger" href="{{ url_for('delete_customer', cid=r.id) }}" onclick="return confirm('تأكيد الحذف؟')">حذف</a>
+          {% else %}
+          <a class="btn btn-danger" href="{{ url_for('delete_supplier', sid=r.id) }}" onclick="return confirm('تأكيد الحذف؟')">حذف</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

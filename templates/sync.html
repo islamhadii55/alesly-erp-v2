@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set title = "المزامنة والعمل دون اتصال" %}
+{% block actions %}
+<button class="btn btn-gold" id="sync-now-btn">مزامنة الآن</button>
+{% endblock %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">عمليات معلّقة</div><div class="value">{{ pending }}</div></div>
+  <div class="card kpi"><div class="label">فشلت</div><div class="value">{{ failed }}</div></div>
+  <div class="card kpi"><div class="label">آخر مزامنة</div><div class="value" style="font-size:16px">{{ print_settings.get('last_sync_at') or '—' }}</div></div>
+  <div class="card kpi"><div class="label">معرف الجهاز</div><div class="value" style="font-size:13px">{{ print_settings.get('device_id','') }}</div></div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>كيف يعمل</h3></div>
+  <div class="panel-b">
+    <p>النظام يعمل بالكامل على هذا الجهاز بدون إنترنت (قاعدة SQLite محلية + كاش الصفحات). عند انقطاع الشبكة تُحفظ الفواتير والمصروفات والعملاء في طابور محلي، وتُرسل تلقائياً فور عودة الاتصال.</p>
+    <ul>
+      <li>سطح المكتب: شغّل <code>python desktop/alasly_desktop.py</code></li>
+      <li>أندرويد: افتح مشروع <code>android/</code> في Android Studio وابنِ APK</li>
+    </ul>
+  </div>
+</div>
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>طابور المزامنة</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>الوقت</th><th>النوع</th><th>الحالة</th><th>خطأ</th></tr>
+        {% for q in queue %}
+        <tr>
+          <td>{{ q.created_at }}</td>
+          <td>{{ q.op_type }}</td>
+          <td>{{ q.status }}</td>
+          <td>{{ q.error or '' }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>الأجهزة والسجل</h3></div>
+    <div class="panel-b">
+      <table>
+        <tr><th>جهاز</th><th>منصة</th><th>آخر ظهور</th></tr>
+        {% for d in devices %}
+        <tr><td>{{ d.device_name }}</td><td>{{ d.platform }}</td><td>{{ d.last_seen }}</td></tr>
+        {% endfor %}
+      </table>
+      <table style="margin-top:12px">
+        <tr><th>اتجاه</th><th>حالة</th><th>رسالة</th><th>وقت</th></tr>
+        {% for l in logs %}
+        <tr><td>{{ l.direction }}</td><td>{{ l.status }}</td><td>{{ l.message }}</td><td>{{ l.created_at }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

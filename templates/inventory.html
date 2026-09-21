@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% set title = "المخزون والأصناف" %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">قيمة المخزون</div><div class="value">{{ value|money }}</div></div>
+  <div class="card kpi"><div class="label">عدد الأصناف</div><div class="value">{{ rows|length }}</div></div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>استيراد وتصدير الأصناف</h3></div>
+  <div class="panel-b">
+    <div class="actions" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <a class="btn" href="{{ url_for('inventory_export', q=q or None) }}">تصدير إلى Excel</a>
+      <a class="btn btn-ghost" href="{{ url_for('inventory_template') }}">تنزيل قالب Excel</a>
+      <button class="btn btn-ghost" type="button" onclick="document.getElementById('import-box').style.display=(document.getElementById('import-box').style.display==='none'?'block':'none')">استيراد من Excel</button>
+    </div>
+    <div id="import-box" style="display:none">
+      <form method="post" action="{{ url_for('inventory_import') }}" enctype="multipart/form-data" class="form-grid">
+        <div class="field"><label>ملف Excel أو CSV</label><input type="file" name="file" accept=".xlsx,.xlsm,.csv" required></div>
+        <div class="field"><label>طريقة الاستيراد</label>
+          <select name="mode">
+            <option value="merge">إضافة وتحديث حسب كود الصنف</option>
+            <option value="replace">حذف كل الأصناف ثم استيراد</option>
+          </select>
+        </div>
+        <div class="actions"><button class="btn">ابدأ الاستيراد</button></div>
+      </form>
+      <p class="muted">يطابق الاستيراد الأصناف بواسطة «كود الصنف»؛ الكود الفارغ يُولَّد تلقائياً. الأعمدة المطلوبة: الاسم، ويمكن إضافة التصنيف والمخزن والممر والرف والموضع والتكلفة والبيع والكمية والباركود.</p>
+    </div>
+  </div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>{{ 'تعديل صنف' if edit else 'إضافة صنف للمخزون' }}</h3>
+    <form method="get"><input name="q" value="{{ q or '' }}" data-suggest="product" placeholder="اكتب حرفاً لإظهار الأصناف"><button class="btn btn-ghost">بحث</button></form>
+  </div>
+  <div class="panel-b">
+    <form method="post" class="form-grid">
+      {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+      <div class="field"><label>كود الصنف (تلقائي)</label>
+        <input name="sku" value="{{ edit.sku if edit else '' }}" {% if edit %}data-edit="1"{% endif %} placeholder="يُولَّد تلقائياً">
+        <small id="sku-hint" class="muted">{% if not edit %}يُنشأ الكود تلقائياً حسب التصنيف{% endif %}</small>
+      </div>
+      <div class="field"><label>الاسم</label><input name="name" value="{{ edit.name if edit else '' }}" data-suggest="product" autocomplete="off" placeholder="اكتب حرفاً لاقتراح الأصناف من المخزن" required></div>
+      <div class="field"><label>التصنيف</label><input name="category" value="{{ edit.category if edit else '' }}" data-suggest="category" autocomplete="off" placeholder="اكتب للبحث في تصنيفات المخزن"></div>
+      <div class="field"><label>الماركة</label><input name="brand" value="{{ edit.brand if edit else '' }}" data-suggest="brand" autocomplete="off" placeholder="اكتب لاقتراح الماركات"></div>
+      <div class="field"><label>الموديلات المتوافقة</label><input name="car_model" value="{{ edit.car_model if edit else '' }}" data-suggest="car_model" autocomplete="off" placeholder="كورولا / يارس / كامري"></div>
+      <div class="field"><label>سنة من</label><input name="year_from" value="{{ edit.year_from if edit else '' }}" placeholder="2015"></div>
+      <div class="field"><label>سنة إلى</label><input name="year_to" value="{{ edit.year_to if edit else '' }}" placeholder="2024"></div>
+      <div class="field"><label>الباركود</label><input name="barcode" value="{{ edit.barcode if edit else '' }}" placeholder="يُطابق الكود أو يُمسح"></div>
+      <div class="field"><label>الوحدة</label><input name="unit" value="{{ edit.unit if edit else 'قطعة' }}" data-suggest="unit" autocomplete="off"></div>
+      <div class="field"><label>نوع الصنف</label>
+        <select name="item_type">
+          <option {% if edit and edit.item_type=='منتج' %}selected{% endif %}>منتج</option>
+          <option {% if edit and edit.item_type=='خدمة' %}selected{% endif %}>خدمة</option>
+          <option {% if edit and edit.item_type=='تجميعة' %}selected{% endif %}>تجميعة</option>
+        </select>
+      </div>
+      <div class="field"><label>تتبع سيريال</label>
+        <select name="serial_tracking">
+          <option value="">بدون</option>
+          <option value="1" {% if edit and edit.serial_tracking %}selected{% endif %}>نعم</option>
+        </select>
+      </div>
+      <div class="field"><label>تكلفة الشراء</label><input name="cost" type="number" step="0.01" value="{{ edit.cost if edit else 0 }}"></div>
+      <div class="field"><label>سعر البيع</label><input name="price" type="number" step="0.01" value="{{ edit.price if edit else 0 }}"></div>
+      <div class="field"><label>الكمية</label><input name="qty" type="number" step="0.01" value="{{ edit.qty if edit else 0 }}"></div>
+      <div class="field"><label>حد إعادة الطلب</label><input name="min_qty" type="number" step="0.01" value="{{ edit.min_qty if edit else 2 }}"></div>
+      <div class="field"><label>المخزن</label><input name="warehouse" value="{{ edit.warehouse if edit else '' }}" data-suggest="warehouse" autocomplete="off" placeholder="الرئيسي / الفرعي"></div>
+      <div class="field"><label>الممر</label><input name="aisle" value="{{ edit.aisle if edit else '' }}" data-suggest="aisle" autocomplete="off" placeholder="A / 1"></div>
+      <div class="field"><label>الرف</label><input name="shelf" value="{{ edit.shelf if edit else '' }}" data-suggest="shelf" autocomplete="off" placeholder="3"></div>
+      <div class="field"><label>الموضع بالضبط</label><input name="bin" value="{{ edit.bin if edit else '' }}" data-suggest="bin" autocomplete="off" placeholder="يسار / رقم الخانة"></div>
+      <div class="field full"><label>ملاحظات</label><input name="notes" value="{{ edit.notes if edit else '' }}"></div>
+      <div class="actions"><button class="btn btn-gold">حفظ الصنف</button>{% if edit %}<a class="btn btn-ghost" href="{{ url_for('inventory') }}">إلغاء</a>{% endif %}</div>
+    </form>
+  </div>
+</div>
+<div class="split">
+  <div class="panel">
+      <div class="panel-h"><h3>أرصدة المخزن</h3>
+        <input data-suggest="product" data-goto-product="1" placeholder="بحث ذكي في المخزون أو مكان الصنف...">
+      </div>
+    <div class="panel-b">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>المنتج</th>
+            <th>الكمية</th>
+            <th>سعر الشراء</th>
+            <th>أقل سعر بيع</th>
+            <th>سعر البيع</th>
+            <th>متوسط الشراء</th>
+            <th>متوسط البيع</th>
+            <th>القيمة الإجمالية</th>
+            <th>الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          {% set st = stats.get(r.id) %}
+          <tr>
+            <td class="inv-product">
+              <div class="inv-tags">
+                <span class="pill pill-sku">SKU: {{ r.sku }}</span>
+                <span class="pill pill-cat">{{ r.category or 'بدون تصنيف' }}</span>
+              </div>
+              <div class="inv-name">{{ r.name }}</div>
+            </td>
+            <td><span class="qty-cell"><span class="dot {{ 'dot-ok' if r.qty > 0 else 'dot-out' }}"></span>{{ r.qty }}</span></td>
+            <td class="inv-money">ج.م {{ r.cost|money }}</td>
+            <td class="inv-money">{% if st and st.min_sale %}ج.م {{ st.min_sale|money }}{% else %}-{% endif %}</td>
+            <td class="inv-money">ج.م {{ r.price|money }}</td>
+            <td class="inv-money">{% if st and st.avg_purchase %}ج.م {{ st.avg_purchase|money }}{% else %}-{% endif %}</td>
+            <td class="inv-money">{% if st and st.avg_sale %}ج.م {{ st.avg_sale|money }}{% else %}-{% endif %}</td>
+            <td class="inv-money">ج.م {{ (r.qty * r.cost)|money }}</td>
+            <td>
+              <div class="inv-actions">
+                <a class="act act-edit" href="{{ url_for('inventory', edit=r.id) }}" title="تعديل الصنف">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                </a>
+                <a class="act act-transfer" href="#transfer-panel" title="تحويل بين المخازن">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h13"/><path d="m14 4 3 3-3 3"/><path d="M20 17H7"/><path d="m10 14-3 3 3 3"/></svg>
+                </a>
+                <a class="act act-grid" href="#stock-moves" title="حركة وبيانات الصنف">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                </a>
+                <a class="act act-menu" href="{{ url_for('inventory', q=r.sku) }}" title="عرض الصنف فقط">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </a>
+                <a class="act act-del" href="{{ url_for('delete_product', pid=r.id) }}" onclick="return confirm('حذف الصنف؟')" title="حذف الصنف">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>تحديد مكان الصنف بالضبط</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('inventory_location') }}">
+          <div class="field"><label>الصنف</label>
+            <input type="hidden" name="product_id" id="loc-product-id" value="{{ rows[0].id if rows else '' }}">
+            <input data-suggest="product" data-target="#loc-product-id" placeholder="اكتب اسم أو كود الصنف" value="{{ (rows[0].sku ~ ' — ' ~ rows[0].name) if rows else '' }}">
+          </div>
+          <div class="field" style="margin:10px 0"><label>المخزن</label><input name="warehouse" placeholder="الرئيسي / الفرعي / المستودع 2"></div>
+          <div class="field" style="margin-bottom:10px"><label>الممر</label><input name="aisle" placeholder="A أو 1"></div>
+          <div class="field" style="margin-bottom:10px"><label>الرف</label><input name="shelf" placeholder="رقم الرف"></div>
+          <div class="field" style="margin-bottom:10px"><label>الموضع بالضبط</label><input name="bin" placeholder="الخانة / يسار / يمين / رقم الدرج"></div>
+          <button class="btn btn-gold">حفظ مكان الصنف</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>تسوية كمية</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('inventory_adjust') }}">
+          <div class="field"><label>الصنف</label>
+            <input type="hidden" name="product_id" id="adjust-product-id" value="{{ rows[0].id if rows else '' }}">
+            <input data-suggest="product" data-target="#adjust-product-id" placeholder="اكتب اسم أو كود الصنف" value="{{ (rows[0].sku ~ ' — ' ~ rows[0].name) if rows else '' }}">
+          </div>
+          <div class="field" style="margin:10px 0"><label>الكمية الجديدة</label><input type="number" step="0.01" name="qty" required></div>
+          <div class="field" style="margin-bottom:10px"><label>السبب</label><input name="notes" placeholder="جرد / هالك / تسوية"></div>
+          <button class="btn btn-navy">حفظ التسوية</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel" id="transfer-panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>تحويل بين المخازن</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('inventory_transfer') }}">
+          <div class="field"><label>الصنف</label>
+            <input type="hidden" name="product_id" id="tr-product-id" value="{{ rows[0].id if rows else '' }}">
+            <input data-suggest="product" data-target="#tr-product-id" placeholder="صنف">
+          </div>
+          <div class="field" style="margin:10px 0"><label>من مخزن</label>
+            <select name="source_id">{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select>
+          </div>
+          <div class="field" style="margin-bottom:10px"><label>إلى مخزن</label>
+            <select name="dest_id">{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select>
+          </div>
+          <div class="field" style="margin-bottom:10px"><label>الكمية</label><input type="number" step="0.01" name="qty" required></div>
+          <button class="btn btn-ghost">تحويل</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>جرد مخزني</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('inventory_count') }}">
+          <div class="field"><label>المخزن</label>
+            <select name="warehouse_id">{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select>
+          </div>
+          <div class="field" style="margin:10px 0"><label>الصنف</label>
+            <input type="hidden" name="product_id" id="cnt-product-id" value="{{ rows[0].id if rows else '' }}">
+            <input data-suggest="product" data-target="#cnt-product-id" placeholder="صنف">
+          </div>
+          <div class="field" style="margin-bottom:10px"><label>الكمية المعدودة</label><input type="number" step="0.01" name="counted_qty" required></div>
+          <div class="field" style="margin-bottom:10px"><label>نوع الجرد</label>
+            <select name="count_type"><option>دوري</option><option>مفاجئ</option></select>
+          </div>
+          <button class="btn btn-navy">حفظ الجرد</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>رقم تسلسلي</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('inventory_serial') }}">
+          <div class="field"><label>الصنف</label>
+            <input type="hidden" name="product_id" id="sn-product-id" value="{{ rows[0].id if rows else '' }}">
+            <input data-suggest="product" data-target="#sn-product-id" placeholder="صنف">
+          </div>
+          <div class="field" style="margin:10px 0"><label>السيريال</label><input name="serial_number" required></div>
+          <button class="btn btn-ghost">تسجيل</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel" id="stock-moves">
+      <div class="panel-h"><h3>حركة المخزون</h3></div>
+      <div class="panel-b">
+        <table>
+          <tr><th>التاريخ</th><th>الصنف</th><th>النوع</th><th>كمية</th><th>مرجع</th></tr>
+          {% for m in moves %}
+          <tr>
+            <td>{{ m.date }}</td>
+            <td>{{ m.name }}</td>
+            <td>{{ m.move_type }}</td>
+            <td class="{% if m.qty<0 %}down{% else %}up{% endif %}">{{ m.qty }}</td>
+            <td>{{ m.ref }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

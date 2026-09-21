@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% set title = "أمر شغل " + job.number %}
+{% block actions %}
+<a class="btn btn-ghost" href="{{ url_for('jobs') }}">كل الأوامر</a>
+{% endblock %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">قطع الغيار</div><div class="value">{{ job.parts_total|money }}</div></div>
+  <div class="card kpi"><div class="label">المصنعية</div><div class="value">{{ job.labor_total|money }}</div></div>
+  <div class="card kpi"><div class="label">الإجمالي</div><div class="value">{{ job.total|money }}</div></div>
+  <div class="card kpi"><div class="label">الحالة</div><div class="value" style="font-size:18px">{{ job.status }}</div></div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>{{ job.customer_name }} · {{ job.plate }} · {{ job.vehicle_type }} {{ job.vehicle_model }} {{ job.vehicle_year }}</h3></div>
+  <div class="panel-b">
+    <p>العطل: {{ job.complaint }} · الفني: {{ job.technician_name or '-' }} · افتتح: {{ job.opened_at }}</p>
+    <form method="post" class="actions">
+      <input type="hidden" name="action" value="status">
+      <select name="status">{% for s in statuses %}<option {% if job.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+      <button class="btn btn-navy">تحديث الحالة</button>
+    </form>
+  </div>
+</div>
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>سحب قطع من المخزن</h3></div>
+    <div class="panel-b">
+      <form method="post">
+        <input type="hidden" name="action" value="add_part">
+        <div class="field"><label>القطعة</label>
+          <input type="hidden" name="product_id" id="job-product-id">
+          <input data-suggest="product" data-target="#job-product-id" placeholder="اسم / كود / باركود">
+        </div>
+        <div class="field" style="margin:10px 0"><label>الكمية</label><input type="number" step="0.01" name="qty" value="1"></div>
+        <button class="btn btn-gold">سحب وإضافة على أمر الشغل</button>
+      </form>
+      <table style="margin-top:12px">
+        <tr><th>القطعة</th><th>كمية</th><th>سعر</th><th>الإجمالي</th></tr>
+        {% for p in parts %}
+        <tr><td>{{ p.description }}</td><td>{{ p.qty }}</td><td>{{ p.unit_price|money }}</td><td>{{ p.line_total|money }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>المصنعية</h3></div>
+    <div class="panel-b">
+      <form method="post">
+        <input type="hidden" name="action" value="add_labor">
+        <div class="field"><label>الخدمة</label><input name="service_name" value="مصنعية صيانة"></div>
+        <div class="field" style="margin:10px 0"><label>الفني</label>
+          <select name="employee_id"><option value="">—</option>{% for t in techs %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label>الساعات</label><input type="number" step="0.1" name="hours" value="1"></div>
+        <div class="field" style="margin-bottom:10px"><label>سعر الساعة</label><input type="number" step="0.01" name="rate" value="80"></div>
+        <button class="btn btn-navy">إضافة مصنعية</button>
+      </form>
+      <table style="margin-top:12px">
+        <tr><th>الخدمة</th><th>ساعات</th><th>سعر</th><th>المبلغ</th></tr>
+        {% for l in labor %}
+        <tr><td>{{ l.service_name }}</td><td>{{ l.hours }}</td><td>{{ l.rate|money }}</td><td>{{ l.amount|money }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+<div class="panel" style="margin-top:14px">
+  <div class="panel-h"><h3>التحويل إلى فاتورة نهائية</h3></div>
+  <div class="panel-b">
+    <form method="post" style="margin-bottom:12px">
+      <input type="hidden" name="action" value="totals">
+      <div class="form-grid">
+        <div class="field"><label>خصم</label><input type="number" step="0.01" name="discount" value="{{ job.discount }}"></div>
+        <div class="field"><label>ضريبة</label><input type="number" step="0.01" name="tax" value="{{ job.tax }}"></div>
+        <div><button class="btn btn-ghost">حفظ الخصم/الضريبة</button></div>
+      </div>
+    </form>
+    {% if job.invoice_id %}
+    <a class="btn btn-ok" href="{{ url_for('invoice_view', inv_id=job.invoice_id) }}">عرض الفاتورة الصادرة</a>
+    {% else %}
+    <form method="post" action="{{ url_for('job_to_invoice', job_id=job.id) }}">
+      <div class="field" style="max-width:280px;margin-bottom:10px"><label>طريقة الدفع</label>
+        <select name="payment_method">{% for m in pay_methods %}<option>{{ m }}</option>{% endfor %}</select>
+      </div>
+      <button class="btn btn-gold">إصدار الفاتورة النهائية (قطع + مصنعية + ضريبة)</button>
+    </form>
+    <p class="muted">التدفق: فتح أمر شغل → سحب القطع → تسجيل المصنعية → تم الإصلاح → فاتورة نهائية → تم التسليم.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

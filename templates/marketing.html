@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% set title = "الحملات والكوبونات والمستهدفات" %}
+{% block content %}
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>حملة تسويقية</h3></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid" style="margin-bottom:16px">
+        <input type="hidden" name="action" value="campaign">
+        <div class="field"><label>الاسم</label><input name="name" required></div>
+        <div class="field"><label>النوع</label>
+          <select name="discount_type"><option>نسبة</option><option>قيمة</option></select>
+        </div>
+        <div class="field"><label>القيمة</label><input type="number" step="0.01" name="discount_value" required></div>
+        <div class="field"><label>من</label><input type="date" name="starts_on" value="{{ today }}"></div>
+        <div class="field"><label>إلى</label><input type="date" name="ends_on" value="{{ today }}"></div>
+        <div><button class="btn btn-gold">حفظ الحملة</button></div>
+      </form>
+      <table>
+        <tr><th>الاسم</th><th>النوع</th><th>القيمة</th><th>الفترة</th></tr>
+        {% for c in campaigns %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td>{{ c.discount_type }}</td>
+          <td>{{ c.discount_value }}</td>
+          <td>{{ c.starts_on }} — {{ c.ends_on }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>كوبون</h3></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid" style="margin-bottom:16px">
+        <input type="hidden" name="action" value="coupon">
+        <div class="field"><label>الكود</label><input name="code" required></div>
+        <div class="field"><label>الحملة</label>
+          <select name="campaign_id">
+            <option value="">بدون</option>
+            {% for c in campaigns %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>النوع</label>
+          <select name="discount_type"><option>نسبة</option><option>قيمة</option></select>
+        </div>
+        <div class="field"><label>القيمة</label><input type="number" step="0.01" name="discount_value" required></div>
+        <div class="field"><label>أقصى استخدام</label><input type="number" name="max_uses" value="10"></div>
+        <div class="field"><label>انتهاء</label><input type="date" name="expires_on"></div>
+        <div><button class="btn btn-navy">إضافة كوبون</button></div>
+      </form>
+      <table>
+        <tr><th>الكود</th><th>النوع</th><th>القيمة</th><th>استخدام</th></tr>
+        {% for c in coupons %}
+        <tr>
+          <td>{{ c.code }}</td>
+          <td>{{ c.discount_type }}</td>
+          <td>{{ c.discount_value }}</td>
+          <td>{{ c.used_count }}/{{ c.max_uses }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+<div class="panel" style="margin-top:14px">
+  <div class="panel-h"><h3>مستهدف المبيعات والعمولة</h3></div>
+  <div class="panel-b">
+    <form method="post" class="form-grid" style="margin-bottom:16px">
+      <input type="hidden" name="action" value="target">
+      <div class="field"><label>المستخدم</label>
+        <select name="username">{% for u in users %}<option>{{ u.username }}</option>{% endfor %}</select>
+      </div>
+      <div class="field"><label>شهر المستهدف</label><input type="date" name="target_month" value="{{ today }}"></div>
+      <div class="field"><label>المبلغ</label><input type="number" step="0.01" name="target_amount" required></div>
+      <div class="field"><label>عمولة %</label><input type="number" step="0.01" name="commission_percent" value="0"></div>
+      <div><button class="btn btn-gold">حفظ المستهدف</button></div>
+    </form>
+    <table>
+      <tr><th>المستخدم</th><th>الشهر</th><th>المستهدف</th><th>العمولة</th></tr>
+      {% for t in targets %}
+      <tr>
+        <td>{{ t.username }}</td>
+        <td>{{ t.target_month }}</td>
+        <td>{{ t.target_amount|money }}</td>
+        <td>{{ t.commission_percent }}%</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

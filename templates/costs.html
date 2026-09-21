@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set title = "حسابات التكلفة" %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">متوسط التكلفة</div><div class="value">{{ avg.c|money }}</div></div>
+  <div class="card kpi"><div class="label">متوسط سعر البيع</div><div class="value">{{ avg.p|money }}</div></div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>هامش كل منتج</h3></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>الصنف</th><th>الاسم</th><th>تكلفة</th><th>بيع</th><th>هامش</th><th>%</th><th>كمية</th><th>قيمة المخزون</th></tr>
+      {% for r in products %}
+      <tr>
+        <td>{{ r.sku }}</td>
+        <td>{{ r.name }}</td>
+        <td>{{ r.cost|money }}</td>
+        <td>{{ r.price|money }}</td>
+        <td class="money up">{{ r.margin|money }}</td>
+        <td>{{ r.margin_pct }}%</td>
+        <td>{{ r.qty }}</td>
+        <td class="money">{{ (r.qty*r.cost)|money }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-h"><h3>تكلفة وربح العمليات</h3></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>التاريخ</th><th>الرقم</th><th>النوع</th><th>الطرف</th><th>الإجمالي</th><th>التكلفة</th><th>الربح</th></tr>
+      {% for r in sales_cost %}
+      <tr>
+        <td>{{ r.date }}</td>
+        <td>{{ r.number }}</td>
+        <td>{{ KIND_LABELS.get(r.kind, r.kind) }}</td>
+        <td>{{ r.party_name }}</td>
+        <td>{{ r.total|money }}</td>
+        <td>{{ r.cost_total|money }}</td>
+        <td class="money {% if r.profit>=0 %}up{% else %}down{% endif %}">{{ r.profit|money }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

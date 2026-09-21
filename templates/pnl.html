@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set title = "حساب الأرباح والخسائر" %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">المبيعات والصيانة</div><div class="value">{{ sales|money }}</div></div>
+  <div class="card kpi"><div class="label">مرتجع المبيعات</div><div class="value down">{{ sale_returns|money }}</div></div>
+  <div class="card kpi"><div class="label">تكلفة البضاعة المباعة</div><div class="value">{{ cogs|money }}</div></div>
+  <div class="card kpi"><div class="label">مجمل الربح</div><div class="value {% if gross>=0 %}up{% else %}down{% endif %}">{{ gross|money }}</div></div>
+  <div class="card kpi"><div class="label">المشتريات</div><div class="value">{{ purchases|money }}</div></div>
+  <div class="card kpi"><div class="label">مرتجع المشتريات</div><div class="value">{{ purchase_returns|money }}</div></div>
+  <div class="card kpi"><div class="label">الرواتب</div><div class="value">{{ salaries_total|money }}</div></div>
+  <div class="card kpi"><div class="label">المصروفات</div><div class="value">{{ expenses_total|money }}</div></div>
+  <div class="card kpi"><div class="label">صافي الربح</div><div class="value {% if net_profit>=0 %}up{% else %}down{% endif %}">{{ net_profit|money }}</div></div>
+</div>
+<div class="panel">
+  <div class="panel-h"><h3>ربح أو خسارة كل عملية</h3></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>التاريخ</th><th>الرقم</th><th>النوع</th><th>الطرف</th><th>الإجمالي</th><th>التكلفة</th><th>ربح/خسارة العملية</th></tr>
+      {% for r in by_op %}
+      <tr>
+        <td>{{ r.date }}</td>
+        <td><a href="{{ url_for('invoice_view', inv_id=r.id) }}">{{ r.number }}</a></td>
+        <td>{{ KIND_LABELS.get(r.kind, r.kind) }}</td>
+        <td>{{ r.party_name }}</td>
+        <td class="money">{{ r.total|money }}</td>
+        <td class="money">{{ r.cost_total|money }}</td>
+        <td class="money {% if r.profit>=0 %}up{% else %}down{% endif %}">{{ r.profit|money }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">لا عمليات بعد. الربح يُحسب تلقائياً عند كل بيع أو صيانة أو مرتجع.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>دخول | {{ APP_NAME }}</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('web_manifest') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand" style="border:0;margin:0 0 16px;padding:0">
+        <img class="logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="الأصلي">
+        <div>
+          <h1 style="font-size:18px">الاصلي لقطع الغيار</h1>
+          <p>نظام الإدارة المتكامل</p>
+        </div>
+      </div>
+      <h1>تسجيل الدخول</h1>
+      <p>أدخل بيانات المدير للوصول إلى النظام</p>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="flash flash-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      <form method="post">
+        <div class="field" style="margin-bottom:10px">
+          <label>اسم المستخدم</label>
+          <input name="username" value="admin" required>
+        </div>
+        <div class="field" style="margin-bottom:16px">
+          <label>كلمة المرور</label>
+          <input type="password" name="password" value="admin123" required>
+        </div>
+        <button class="btn btn-gold" style="width:100%;padding:12px">دخول النظام</button>
+      </form>
+      <p class="muted" style="margin-top:14px;font-size:12px">المستخدم الافتراضي: admin / admin123 — يعمل بدون إنترنت على هذا الجهاز</p>
+    </div>
+  </div>
+  <script>window.ALASLY_SYNC = {};</script>
+  <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+</body>
+</html>

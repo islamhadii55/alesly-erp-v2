@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14273d">
+  <title>{{ title or APP_NAME }}</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('web_manifest') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>window.ALASLY_SYNC = {{ sync_cfg|tojson }}; window.ALASLY_PLATFORM = window.ALASLY_PLATFORM || "web";</script>
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="الأصلي">
+        <div>
+          <h1>الاصلي لقطع الغيار</h1>
+          <p>تجارة وصيانة السيارات</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <div class="nav-group">الرئيسية</div>
+        <a class="{{ nav_active('dashboard') }}" href="{{ url_for('dashboard') }}">لوحة التحكم</a>
+        {% if can('pos') or can('sales') or can('quotes') or can('jobs') %}
+        <div class="nav-group">المبيعات والورشة</div>
+        {% endif %}
+        {% if can('pos') %}<a class="{{ nav_active('pos') }}" href="{{ url_for('pos') }}">كاشير قطع الغيار</a>{% endif %}
+        {% if can('quotes') %}<a class="{{ nav_active('quotes') }}" href="{{ url_for('quotes') }}">عروض الأسعار</a>{% endif %}
+        {% if can('sales') %}
+        <a class="{{ nav_active('invoices_list') if kind=='sale' else '' }}" href="{{ url_for('invoices_list', kind='sale') }}">فواتير البيع</a>
+        <a class="{{ nav_active('invoices_list') if kind=='sale_return' else '' }}" href="{{ url_for('invoices_list', kind='sale_return') }}">مرتجع البيع</a>
+        <a class="{{ nav_active('invoices_list') if kind=='maintenance' else '' }}" href="{{ url_for('invoices_list', kind='maintenance') }}">فواتير الصيانة</a>
+        {% endif %}
+        {% if can('jobs') %}<a class="{{ nav_active('jobs') }}" href="{{ url_for('jobs') }}">أوامر الشغل</a>{% endif %}
+        {% if can('purchases') %}
+        <div class="nav-group">المشتريات</div>
+        <a class="{{ nav_active('invoices_list') if kind=='purchase' else '' }}" href="{{ url_for('invoices_list', kind='purchase') }}">فواتير الشراء</a>
+        <a class="{{ nav_active('invoices_list') if kind=='purchase_return' else '' }}" href="{{ url_for('invoices_list', kind='purchase_return') }}">مرتجع الشراء</a>
+        {% endif %}
+        {% if can('inventory') or can('parties') or can('accounts') or can('treasury') or can('finance') or can('journal') or can('costs') or can('pnl') or can('expenses') or can('marketing') or can('reports') or can('sync') %}
+        <div class="nav-group">المخزون والحسابات</div>
+        {% endif %}
+        {% if can('inventory') %}
+        <a class="{{ nav_active('inventory') }}" href="{{ url_for('inventory') }}">المخزون والأصناف</a>
+        <a class="{{ nav_active('inventory_shortages') }}" href="{{ url_for('inventory_shortages') }}">النواقص</a>
+        {% endif %}
+        {% if can('parties') %}
+        <a class="{{ nav_active('customers') }}" href="{{ url_for('customers') }}">العملاء</a>
+        <a class="{{ nav_active('suppliers') }}" href="{{ url_for('suppliers') }}">الموردون</a>
+        {% endif %}
+        {% if can('accounts') %}<a class="{{ nav_active('accounts') }}" href="{{ url_for('accounts') }}">حسابات العملاء والموردين</a>{% endif %}
+        {% if can('treasury') %}<a class="{{ nav_active('treasury') }}" href="{{ url_for('treasury') }}">الخزينة والوردية</a>{% endif %}
+        {% if can('finance') %}<a class="{{ nav_active('finance') }}" href="{{ url_for('finance') }}">شيكات وأقساط وسندات</a>{% endif %}
+        {% if can('journal') %}<a class="{{ nav_active('journal') }}" href="{{ url_for('journal') }}">القيود اليومية</a>{% endif %}
+        {% if can('costs') %}<a class="{{ nav_active('costs') }}" href="{{ url_for('costs') }}">حسابات التكلفة</a>{% endif %}
+        {% if can('pnl') %}<a class="{{ nav_active('pnl') }}" href="{{ url_for('pnl') }}">الأرباح والخسائر</a>{% endif %}
+        {% if can('expenses') %}<a class="{{ nav_active('expenses') }}" href="{{ url_for('expenses') }}">المصروفات</a>{% endif %}
+        {% if can('marketing') %}<a class="{{ nav_active('marketing') }}" href="{{ url_for('marketing') }}">حملات وكوبونات</a>{% endif %}
+        {% if can('reports') %}<a class="{{ nav_active('reports') }}" href="{{ url_for('reports') }}">التقارير</a>{% endif %}
+        {% if can('sync') %}<a class="{{ nav_active('sync_center') }}" href="{{ url_for('sync_center') }}">المزامنة بدون إنترنت</a>{% endif %}
+        {% if can('hr') %}
+        <div class="nav-group">الموارد البشرية</div>
+        <a class="{{ nav_active('employees') }}" href="{{ url_for('employees') }}">الموظفون</a>
+        <a class="{{ nav_active('advances') }}" href="{{ url_for('advances') }}">السلف</a>
+        <a class="{{ nav_active('salaries') }}" href="{{ url_for('salaries') }}">الرواتب</a>
+        {% endif %}
+        {% if role == 'مدير' %}
+        <div class="nav-group">الإعدادات</div>
+        <a class="{{ nav_active('settings') }}" href="{{ url_for('settings') }}">المستخدمون والصلاحيات</a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}">تسجيل الخروج</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="win-strip">
+        <span class="win-title">{{ APP_NAME }}</span>
+        <span class="win-user">{{ session.get('full_name', user) }} — {{ role or '' }}</span>
+        <span class="win-clock" id="win-clock">{{ today }}</span>
+      </div>
+      <div class="toolbar-green">
+        {% if can('pos') %}<a class="tb-btn" href="{{ url_for('pos') }}">كاشير</a>{% endif %}
+        {% if can('sales') %}
+        <a class="tb-btn" href="{{ url_for('invoice_new', kind='sale') }}">فاتورة بيع</a>
+        <a class="tb-btn" href="{{ url_for('invoice_new', kind='maintenance') }}">صيانة</a>
+        <a class="tb-btn" href="{{ url_for('invoices_list', kind='sale_return') }}">مرتجع</a>
+        {% endif %}
+        {% if can('purchases') %}<a class="tb-btn" href="{{ url_for('invoice_new', kind='purchase') }}">مشتريات</a>{% endif %}
+        {% if can('inventory') %}
+        <a class="tb-btn" href="{{ url_for('inventory') }}">المخزون</a>
+        <a class="tb-btn" href="{{ url_for('inventory_shortages') }}">النواقص</a>
+        {% endif %}
+        {% if can('parties') %}
+        <a class="tb-btn" href="{{ url_for('customers') }}">العملاء</a>
+        <a class="tb-btn" href="{{ url_for('suppliers') }}">الموردون</a>
+        {% endif %}
+        {% if can('reports') %}<a class="tb-btn tb-alt" href="{{ url_for('reports') }}">التقارير</a>{% endif %}
+        {% if role == 'مدير' %}<a class="tb-btn tb-alt" href="{{ url_for('settings') }}">الإعدادات</a>{% endif %}
+      </div>
+      <div class="navy-bar">
+        <div class="global-search">
+          <input data-suggest="product" data-goto-product="1" placeholder="بحث ذكي عن صنف... اكتب حرفاً">
+        </div>
+        {% if quick_stats %}
+        <span class="navy-field">قيمة المخزون <b>{{ quick_stats.stock_value|money }}</b></span>
+        <span class="navy-field">حسابات العملاء <b>{{ quick_stats.customers_due|money }}</b></span>
+        <span class="navy-field">حسابات الموردين <b>{{ quick_stats.suppliers_due|money }}</b></span>
+        <span class="navy-field">نقص المخزون <b>{{ quick_stats.low_stock }}</b></span>
+        {% endif %}
+      </div>
+      <div class="topbar">
+        <div>
+          <h2>{{ title or APP_NAME }}</h2>
+          <div class="meta">{{ session.get('full_name', user) }} · {{ role or '' }} · {{ today }}</div>
+        </div>
+        <div class="actions">
+          <span id="offline-badge" class="badge b-paid">متصل</span>
+          {% if open_shift %}
+          <span class="badge b-paid">وردية مفتوحة</span>
+          {% else %}
+          <span class="badge b-void">لا وردية</span>
+          {% endif %}
+          {% block actions %}{% endblock %}
+        </div>
+      </div>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="flash flash-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+      <p class="footer-note">{{ APP_NAME }} — نظام إدارة متكامل للمبيعات والمشتريات والمخزون والصيانة والموارد البشرية.</p>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+  <script>
+    (function () {
+      var node = document.getElementById("win-clock");
+      if (!node) return;
+      function tick() {
+        var d = new Date();
+        node.textContent = d.toLocaleDateString("ar-EG") + " — " +
+          d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
+      tick();
+      setInterval(tick, 1000);
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

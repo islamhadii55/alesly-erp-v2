@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>طباعة {{ inv.number }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body { background: #fff; }
+    .sheet { max-width: {% if settings.get('paper_size')=='80mm' %}320px{% elif settings.get('paper_size')=='A5' %}700px{% else %}900px{% endif %}; margin: 20px auto; padding: 18px; }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff; }
+      .sheet { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="text-align:center;padding:12px">
+    <button class="btn btn-gold" onclick="window.print()">طباعة</button>
+    <a class="btn btn-ghost" href="{{ url_for('invoice_view', inv_id=inv.id) }}">رجوع</a>
+  </div>
+  <div class="sheet invoice-print">
+    <div class="print-book">دفتر {{ book_type or inv.status }}</div>
+    <div class="inv-head">
+      <div class="print-brand">
+        <img class="print-logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="">
+        <div>
+          <h2 style="margin:0">{{ settings.get('shop_name', APP_NAME) }}</h2>
+          <div class="muted">{{ settings.get('shop_subtitle','') }}</div>
+          <div class="muted">{{ settings.get('address','') }} · {{ settings.get('phone','') }}</div>
+          {% if settings.get('tax_no') %}<div class="muted">الرقم الضريبي: {{ settings.get('tax_no') }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="print-meta">
+        <strong>{{ KIND_LABELS.get(inv.kind, inv.kind) }}</strong><br>
+        رقم: {{ inv.number }}<br>
+        التاريخ: {{ inv.date }}<br>
+        الحالة: {{ inv.status }}
+        {% if inv.salesperson %}<br>المندوب: {{ inv.salesperson }}{% endif %}
+      </div>
+    </div>
+    <p>الطرف: <strong>{{ inv.party_name or '-' }}</strong>
+      {% if inv.vehicle %} · السيارة: {{ inv.vehicle }}{% endif %}
+      · طريقة الدفع: {{ inv.payment_method or inv.status }}
+    </p>
+    <table>
+      <tr>
+        <th>الوصف</th><th>كمية</th><th>سعر الوحدة</th><th>الإجمالي</th>
+        {% if settings.get('show_cost')=='1' %}<th>التكلفة</th>{% endif %}
+        {% if settings.get('show_profit')=='1' %}<th>الربح</th>{% endif %}
+      </tr>
+      {% for it in items %}
+      <tr>
+        <td>{{ it.description }}</td>
+        <td>{{ it.qty }}</td>
+        <td>{{ it.unit_price|money }}</td>
+        <td class="money">{{ it.line_total|money }}</td>
+        {% if settings.get('show_cost')=='1' %}<td>{{ it.line_cost|money }}</td>{% endif %}
+        {% if settings.get('show_profit')=='1' %}<td>{{ it.line_profit|money }}</td>{% endif %}
+      </tr>
+      {% endfor %}
+    </table>
+    <p style="text-align:left">
+      المجموع: {{ inv.subtotal|money }}<br>
+      الخصم: {{ inv.discount|money }}<br>
+      الضريبة: {{ inv.tax|money }}<br>
+      <strong>الصافي: {{ inv.total|money }}</strong><br>
+      المدفوع: {{ inv.paid|money }}<br>
+      المتبقي: {{ (inv.total - inv.paid)|money }}
+    </p>
+    {% if inv.notes %}<p class="muted">ملاحظات: {{ inv.notes }}</p>{% endif %}
+    <div class="print-sign">
+      <div>توقيع المستلم</div>
+      <div>ختم الشركة</div>
+    </div>
+    <p style="text-align:center;margin-top:24px">{{ settings.get('print_footer','') }}</p>
+  </div>
+  <script>
+    window.addEventListener('load', function(){ window.print(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% set title = "فتح أمر شغل" %}
+{% block content %}
+<form method="post">
+  <div class="panel">
+    <div class="panel-h"><h3>بيانات السيارة والعميل</h3></div>
+    <div class="panel-b form-grid">
+      <div class="field">
+        <label>العميل</label>
+        <input type="hidden" name="customer_id" id="party-id">
+        <input data-suggest="customer" data-target="#party-id" placeholder="اكتب اسم العميل">
+      </div>
+      <div class="field"><label>اسم العميل</label><input name="customer_name" id="party-name" required></div>
+      <div class="field"><label>الجوال</label><input name="phone"></div>
+      <div class="field"><label>رقم اللوحة</label><input name="plate" required></div>
+      <div class="field"><label>نوع السيارة</label><input name="vehicle_type" placeholder="تويوتا"></div>
+      <div class="field"><label>الموديل</label><input name="vehicle_model" placeholder="كامري"></div>
+      <div class="field"><label>سنة الصنع</label><input name="vehicle_year" placeholder="2018"></div>
+      <div class="field"><label>الفني المسؤول</label>
+        <select name="technician_id">
+          <option value="">—</option>
+          {% for t in techs %}<option value="{{ t.id }}">{{ t.name }} — {{ t.job_title }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field full"><label>العطل المشتكى منه</label><textarea name="complaint" required></textarea></div>
+      <div class="field full"><label>ملاحظات</label><input name="notes"></div>
+      <div><button class="btn btn-gold">فتح أمر الشغل</button></div>
+    </div>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% set title = "الخزينة والوردية" %}
+{% block content %}
+<div class="cards">
+  {% for a in accounts %}
+  <div class="card kpi">
+    <div class="label">{{ a.name }} · {{ a.account_type }}</div>
+    <div class="value">{{ a.balance|money }}</div>
+  </div>
+  {% endfor %}
+</div>
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>حركة خزينة</h3></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid" style="margin-bottom:16px">
+        <input type="hidden" name="action" value="move">
+        <div class="field"><label>الحساب</label>
+          <select name="account_id">{% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select>
+        </div>
+        <div class="field"><label>النوع</label>
+          <select name="direction"><option>وارد</option><option>صادر</option></select>
+        </div>
+        <div class="field"><label>المبلغ</label><input type="number" step="0.01" name="amount" required></div>
+        <div class="field full"><label>البيان</label><input name="description" required></div>
+        <div><button class="btn btn-gold">ترحيل</button></div>
+      </form>
+      <table>
+        <tr><th>التاريخ</th><th>الحساب</th><th>النوع</th><th>المبلغ</th><th>البيان</th></tr>
+        {% for m in moves %}
+        <tr>
+          <td>{{ m.transaction_date }}</td>
+          <td>{{ m.account_name }}</td>
+          <td>{{ m.transaction_type }}</td>
+          <td class="money {% if m.transaction_type=='صادر' %}down{% else %}up{% endif %}">{{ m.amount|money }}</td>
+          <td>{{ m.description }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>الوردية</h3></div>
+      <div class="panel-b">
+        {% if shift %}
+        <form method="post" action="{{ url_for('shift_close') }}">
+          <p>مفتوحة منذ {{ shift.started_at }} — عهدة {{ shift.opening_cash|money }}</p>
+          <div class="field" style="margin:10px 0"><label>النقد الفعلي</label><input type="number" step="0.01" name="actual_cash" required></div>
+          <button class="btn btn-danger">إغلاق وردية</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ url_for('shift_open') }}">
+          <div class="field" style="margin-bottom:10px"><label>عهدة الافتتاح</label><input type="number" step="0.01" name="opening_cash" value="0"></div>
+          <button class="btn btn-gold">فتح وردية</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>حساب جديد</h3></div>
+      <div class="panel-b">
+        <form method="post">
+          <input type="hidden" name="action" value="account">
+          <div class="field" style="margin-bottom:8px"><label>الاسم</label><input name="name" required></div>
+          <div class="field" style="margin-bottom:8px"><label>النوع</label>
+            <select name="account_type"><option>خزينة</option><option>بنك</option><option>محفظة</option></select>
+          </div>
+          <div class="field" style="margin-bottom:8px"><label>رصيد أول</label><input type="number" step="0.01" name="opening_balance" value="0"></div>
+          <button class="btn btn-navy">إضافة</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h3>إغلاق اليومية</h3></div>
+      <div class="panel-b">
+        <div class="cards" style="margin-bottom:10px">
+          <div class="card kpi"><div class="label">مبيعات اليوم</div><div class="value">{{ day.sales_total|money }}</div></div>
+          <div class="card kpi"><div class="label">نقد محصّل</div><div class="value">{{ day.sales_cash|money }}</div></div>
+          <div class="card kpi"><div class="label">مصروفات</div><div class="value">{{ day.expenses_total|money }}</div></div>
+          <div class="card kpi"><div class="label">رصيد الدرج</div><div class="value">{{ day.drawer_balance|money }}</div></div>
+        </div>
+        <form method="post">
+          <input type="hidden" name="action" value="day_close">
+          <input type="hidden" name="closing_date" value="{{ today }}">
+          <div class="field" style="margin-bottom:8px"><label>النقد الفعلي في الدرج</label>
+            <input type="number" step="0.01" name="actual_cash" value="{{ day.drawer_balance }}">
+          </div>
+          <div class="field" style="margin-bottom:8px"><label>ملاحظات</label><input name="notes"></div>
+          <button class="btn btn-danger" onclick="return confirm('إغلاق يومية اليوم وأرشفتها؟')">إغلاق اليومية والأرشفة</button>
+        </form>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h3>أرشيف الإغلاقات</h3></div>
+      <div class="panel-b">
+        <table>
+          <tr><th>التاريخ</th><th>متوقع</th><th>فعلي</th><th>فرق</th><th></th></tr>
+          {% for c in closures %}
+          <tr>
+            <td>{{ c.closing_date }}</td>
+            <td>{{ c.expected_cash|money }}</td>
+            <td>{{ c.actual_cash|money }}</td>
+            <td class="{% if c.difference!=0 %}down{% endif %}">{{ c.difference|money }}</td>
+            <td><a class="btn btn-ghost" href="{{ url_for('day_archive', close_id=c.id) }}">عرض الأرشيف</a></td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

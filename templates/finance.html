@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% set title = "الشيكات والأقساط والسندات" %}
+{% block content %}
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>شيك جديد</h3></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid">
+        <input type="hidden" name="action" value="check">
+        <div class="field"><label>رقم الشيك</label><input name="check_number" required></div>
+        <div class="field"><label>النوع</label>
+          <select name="check_type"><option>وارد</option><option>صادر</option></select>
+        </div>
+        <div class="field"><label>البنك</label><input name="bank_name"></div>
+        <div class="field"><label>المبلغ</label><input type="number" step="0.01" name="amount" required></div>
+        <div class="field"><label>الاستحقاق</label><input type="date" name="due_date" value="{{ today }}"></div>
+        <div class="field"><label>العميل</label>
+          <select name="customer_id">
+            <option value="">—</option>
+            {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>المورد</label>
+          <select name="supplier_id">
+            <option value="">—</option>
+            {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field full"><label>ملاحظات</label><input name="notes"></div>
+        <div><button class="btn btn-gold">تسجيل الشيك</button></div>
+      </form>
+      <table style="margin-top:14px">
+        <tr><th>رقم</th><th>نوع</th><th>مبلغ</th><th>استحقاق</th><th>حالة</th><th></th></tr>
+        {% for c in checks %}
+        <tr>
+          <td>{{ c.check_number }}</td>
+          <td>{{ c.check_type }}</td>
+          <td class="money">{{ c.amount|money }}</td>
+          <td>{{ c.due_date }}</td>
+          <td>{{ c.status }}</td>
+          <td>
+            <form method="post" style="margin:0">
+              <input type="hidden" name="action" value="check_status">
+              <input type="hidden" name="check_id" value="{{ c.id }}">
+              <select name="status">
+                <option>معلق</option><option>محصّل</option><option>مرتد</option><option>ملغى</option>
+              </select>
+              <button class="btn btn-ghost">تحديث</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>سند قبض / صرف</h3></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid">
+        <input type="hidden" name="action" value="receipt">
+        <div class="field"><label>الطرف</label>
+          <select name="party_type" id="party-type" onchange="switchParty()">
+            <option value="customer">عميل</option>
+            <option value="supplier">مورد</option>
+          </select>
+        </div>
+        <div class="field"><label>الاسم</label>
+          <select name="party_id" id="party-customer">
+            {% for c in customers %}<option value="{{ c.id }}">{{ c.name }} — {{ c.balance|money }}</option>{% endfor %}
+          </select>
+          <select id="party-supplier" style="display:none" disabled>
+            {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }} — {{ s.balance|money }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>المبلغ</label><input type="number" step="0.01" name="amount" required></div>
+        <div class="field"><label>الطريقة</label>
+          <select name="method">{% for m in pay_methods %}<option>{{ m }}</option>{% endfor %}</select>
+        </div>
+        <div class="field full"><label>بيان</label><input name="notes"></div>
+        <div><button class="btn btn-navy">ترحيل السند</button></div>
+      </form>
+      <table style="margin-top:14px">
+        <tr><th>التاريخ</th><th>الطرف</th><th>المبلغ</th><th>طريقة</th><th></th></tr>
+        {% for p in payments %}
+        <tr>
+          <td>{{ p.date }}</td>
+          <td>{{ p.party_name }}</td>
+          <td class="money">{{ p.amount|money }}</td>
+          <td>{{ p.method }}</td>
+          <td><a class="btn btn-ghost" href="{{ url_for('receipt_print', pay_id=p.id) }}">طباعة</a></td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+<div class="panel" style="margin-top:14px">
+  <div class="panel-h"><h3>الأقساط المستحقة</h3></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>العميل</th><th>رقم</th><th>استحقاق</th><th>المبلغ</th><th>المدفوع</th><th>حالة</th><th></th></tr>
+      {% for i in installments %}
+      <tr>
+        <td>{{ i.customer_name }}</td>
+        <td>{{ i.installment_no }}</td>
+        <td>{{ i.due_date }}</td>
+        <td>{{ i.amount|money }}</td>
+        <td>{{ i.paid_amount|money }}</td>
+        <td>{{ i.status }}</td>
+        <td>
+          {% if i.status != 'مسدد' %}
+          <form method="post" style="margin:0" class="actions">
+            <input type="hidden" name="action" value="pay_installment">
+            <input type="hidden" name="installment_id" value="{{ i.id }}">
+            <input type="number" step="0.01" name="amount" value="{{ i.amount - i.paid_amount }}" style="width:110px">
+            <button class="btn btn-gold">تحصيل</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function switchParty() {
+  var t = document.getElementById('party-type').value;
+  var c = document.getElementById('party-customer');
+  var s = document.getElementById('party-supplier');
+  if (!c || !s) return;
+  if (t === 'customer') {
+    c.style.display = ''; c.disabled = false; c.name = 'party_id';
+    s.style.display = 'none'; s.disabled = true; s.removeAttribute('name');
+  } else {
+    s.style.display = ''; s.disabled = false; s.name = 'party_id';
+    c.style.display = 'none'; c.disabled = true; c.removeAttribute('name');
+  }
+}
+</script>
+{% endblock %}

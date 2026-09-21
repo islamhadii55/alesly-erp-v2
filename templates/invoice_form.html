@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set title = 'إنشاء ' + KIND_LABELS[kind] %}
+{% block content %}
+<form method="post" id="inv-form">
+  <div class="panel" style="margin-bottom:14px">
+    <div class="panel-h"><h3>بيانات المستند</h3></div>
+    <div class="panel-b form-grid">
+      <div class="field">
+        <label>{{ 'العميل' if kind in ['sale','sale_return','maintenance'] else 'المورد' }}</label>
+        <input type="hidden" name="party_id" id="party-id" value="{{ related.party_id if related else '' }}">
+        <input data-suggest="{{ 'customer' if kind in ['sale','sale_return','maintenance'] else 'supplier' }}" data-target="#party-id" name="party_search" placeholder="اكتب حرفاً لإظهار الأسماء" value="{{ related.party_name if related else '' }}">
+      </div>
+      <div class="field"><label>الاسم الظاهر</label><input name="party_name" id="party-name" value="{{ related.party_name if related else '' }}" placeholder="اختياري إن لم يُختر طرف"></div>
+      <div class="field"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+      <div class="field">
+        <label>طريقة الدفع</label>
+        <select name="payment_method">
+          <option>نقدي</option>
+          <option>فيزا</option>
+          <option>محفظة إلكترونية</option>
+          <option>آجل</option>
+          <option>شيك</option>
+          <option>أقساط</option>
+        </select>
+      </div>
+      <div class="field"><label>المندوب / البائع</label><input name="salesperson" value="{{ session.get('full_name') or session.get('user') }}"></div>
+      <div class="field"><label>المدفوع</label><input type="number" step="0.01" name="paid" value="0"></div>
+      {% if kind=='maintenance' %}
+      <div class="field"><label>السيارة / اللوحة</label><input name="vehicle" placeholder="تويوتا كامري - أ ب ج 1234"></div>
+      {% endif %}
+      <div class="field"><label>الخصم</label><input type="number" step="0.01" name="discount" value="0"></div>
+      <div class="field"><label>كود كوبون</label><input name="coupon_code" placeholder="SAVE10"></div>
+      <div class="field"><label>عدد الأقساط</label><input type="number" name="installments_count" value="0" min="0"></div>
+      <div class="field"><label>استحقاق</label><input type="date" name="due_date"></div>
+      <div class="field"><label>الضريبة</label><input type="number" step="0.01" name="tax" value="0"></div>
+      <div class="field full"><label>ملاحظات</label><input name="notes" value="{{ related.notes if related else '' }}"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h">
+      <h3>البنود</h3>
+      <button type="button" class="btn btn-ghost" onclick="addProductRow()">إضافة بند</button>
+    </div>
+    <div class="panel-b">
+      <table id="items">
+        <thead>
+          <tr><th>المنتج</th><th>الوصف</th><th>الكمية</th><th>التكلفة</th><th>السعر</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% if related %}
+            {% for it in related.items %}
+            <tr>
+              <td>
+                <input type="hidden" name="item_product_id[]" value="{{ it.product_id or '' }}">
+                <input class="item-search" placeholder="اكتب اسم أو كود الصنف" value="{{ it.description }}">
+              </td>
+              <td><input name="item_desc[]" value="{{ it.description }}"></td>
+              <td><input name="item_qty[]" type="number" step="0.01" value="{{ it.qty }}"></td>
+              <td><input name="item_cost[]" type="number" step="0.01" value="{{ it.unit_cost }}"></td>
+              <td><input name="item_price[]" type="number" step="0.01" value="{{ it.unit_price }}"></td>
+              <td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove()">حذف</button></td>
+            </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+      <div style="margin-top:14px"><button class="btn btn-gold">حفظ المستند واحتساب الربح</button></div>
+    </div>
+  </div>
+</form>
+<template id="row-tpl">
+  <tr>
+    <td>
+      <input type="hidden" name="item_product_id[]" value="">
+      <input class="item-search" placeholder="اكتب حرفاً لإظهار الأصناف">
+    </td>
+    <td><input name="item_desc[]"></td>
+    <td><input name="item_qty[]" type="number" step="0.01" value="1"></td>
+    <td><input name="item_cost[]" type="number" step="0.01" value="0"></td>
+    <td><input name="item_price[]" type="number" step="0.01" value="0"></td>
+    <td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove()">حذف</button></td>
+  </tr>
+</template>
+{% endblock %}

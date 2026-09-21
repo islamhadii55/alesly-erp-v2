@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set title = KIND_LABELS.get(inv.kind, inv.kind) + ' ' + inv.number %}
+{% block actions %}
+<a class="btn btn-navy" href="{{ url_for('invoice_print', inv_id=inv.id) }}">طباعة</a>
+{% if inv.status != 'ملغاة' %}
+<form method="post" action="{{ url_for('invoice_cancel', inv_id=inv.id) }}" style="display:inline;margin:0">
+  <button class="btn btn-danger" onclick="return confirm('إلغاء المستند وإرجاع المخزون والخزينة؟')">إلغاء المستند</button>
+</form>
+{% endif %}
+<a class="btn btn-ghost" href="{{ url_for('invoices_list', kind=inv.kind) }}">رجوع</a>
+{% endblock %}
+{% block content %}
+<div class="invoice-print">
+  <div class="inv-head">
+    <div class="print-brand">
+      <img class="print-logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="">
+      <div>
+        <h2 style="margin:0">{{ print_settings.get('shop_name', APP_NAME) }}</h2>
+        <div class="muted">{{ print_settings.get('shop_subtitle','وخدمات صيانة السيارات') }}</div>
+      </div>
+    </div>
+    <div>
+      <strong>{{ KIND_LABELS.get(inv.kind, inv.kind) }}</strong><br>
+      رقم: {{ inv.number }}<br>
+      التاريخ: {{ inv.date }}
+    </div>
+  </div>
+  <p>الطرف: <strong>{{ inv.party_name or '-' }}</strong>
+    {% if inv.vehicle %} · السيارة: {{ inv.vehicle }}{% endif %}
+    · الحالة: {{ inv.status }}
+  </p>
+  <table>
+    <tr><th>الوصف</th><th>كمية</th><th>تكلفة الوحدة</th><th>سعر الوحدة</th><th>الإجمالي</th><th>تكلفة البند</th><th>ربح البند</th></tr>
+    {% for it in items %}
+    <tr>
+      <td>{{ it.description }}</td>
+      <td>{{ it.qty }}</td>
+      <td>{{ it.unit_cost|money }}</td>
+      <td>{{ it.unit_price|money }}</td>
+      <td class="money">{{ it.line_total|money }}</td>
+      <td class="money">{{ it.line_cost|money }}</td>
+      <td class="money {% if it.line_profit>=0 %}up{% else %}down{% endif %}">{{ it.line_profit|money }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p style="text-align:left">
+    المجموع: {{ inv.subtotal|money }}<br>
+    الخصم: {{ inv.discount|money }}<br>
+    الضريبة: {{ inv.tax|money }}<br>
+    <strong>الصافي: {{ inv.total|money }}</strong><br>
+    المدفوع: {{ inv.paid|money }}<br>
+    تكلفة البضاعة: {{ inv.cost_total|money }}<br>
+    <strong>ربح/خسارة العملية: {{ inv.profit|money }}</strong>
+  </p>
+  {% if inv.notes %}<p class="muted">ملاحظات: {{ inv.notes }}</p>{% endif %}
+</div>
+{% endblock %}

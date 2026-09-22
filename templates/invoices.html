@@ -10,10 +10,27 @@
   </div>
   <div class="panel-b">
     <table>
-      <tr><th>الرقم</th><th>التاريخ</th><th>الطرف</th><th>الحالة</th><th>الإجمالي</th><th>المدفوع</th><th>التكلفة</th><th>الربح/الخسارة</th><th></th></tr>
+      <tr><th>الرقم</th><th>نوع الفاتورة</th><th>التاريخ</th><th>الطرف</th><th>الحالة</th><th>الإجمالي</th><th>المدفوع</th><th>التكلفة</th><th>الربح/الخسارة</th><th></th></tr>
       {% for r in rows %}
       <tr>
         <td>{{ r.number }}</td>
+        <td>
+          {% if r.kind in ['sale_maintenance', 'both'] %}
+          <span class="badge b-open">مبيعات وصيانة</span>
+          {% elif r.kind == 'maintenance' %}
+          <span class="badge b-credit">صيانة</span>
+          {% elif r.kind == 'sale' %}
+          <span class="badge b-paid">مبيعات</span>
+          {% elif r.kind == 'purchase' %}
+          <span class="badge b-credit">مشتريات</span>
+          {% elif r.kind == 'sale_return' %}
+          <span class="badge b-open">مرتجع مبيعات</span>
+          {% elif r.kind == 'purchase_return' %}
+          <span class="badge b-open">مرتجع مشتريات</span>
+          {% else %}
+          <span class="badge b-void">{{ KIND_LABELS.get(r.kind, r.kind) }}</span>
+          {% endif %}
+        </td>
         <td>{{ r.date }}</td>
         <td>{{ r.party_name }}</td>
           <td><span class="badge {% if r.status=='ملغاة' %}b-void{% elif r.status=='نقدي' %}b-paid{% elif r.status=='آجل' %}b-credit{% else %}b-open{% endif %}">{{ r.status }}</span></td>
@@ -32,7 +49,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9">لا توجد مستندات. أنشئ مستنداً جديداً.</td></tr>
+      <tr><td colspan="10">لا توجد مستندات. أنشئ مستنداً جديداً.</td></tr>
       {% endfor %}
     </table>
   </div>

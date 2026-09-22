@@ -116,12 +116,15 @@ ENDPOINT_PERMISSIONS = {
     "invoice_new": "invoices",
     "invoice_view": "invoices",
     "invoice_print": "invoices",
+    "invoice_pdf": "invoices",
     "invoice_cancel": "invoices",
     "receipt_print": "finance",
     "day_close": "treasury",
     "day_archive": "treasury",
     "quotes": "quotes",
     "quote_to_invoice": "quotes",
+    "quote_new": "quotes",
+    "quote_pdf": "quotes",
     "jobs": "jobs",
     "job_new": "jobs",
     "job_view": "jobs",
@@ -157,8 +160,10 @@ ENDPOINT_PERMISSIONS = {
     "expenses": "expenses",
     "marketing": "marketing",
     "reports": "reports",
+    "reports_export_pdf": "reports",
     "shift_reports": "reports",
     "payroll_deductions": "attendance_review",
+    "payroll_deductions_export_pdf": "attendance_review",
     "sync_center": "sync",
     "employees": "hr",
     "delete_employee": "hr",
@@ -191,7 +196,20 @@ def user_has_permission(module):
         return False
     if session.get("role") == "مدير":
         return True
-    perms = session.get("permissions")
+    branch_id = session.get("branch_id")
+    if branch_id and session.get("user_id"):
+        branch_access = query(
+            "SELECT permissions, status FROM user_branch_permissions WHERE user_id=? AND branch_id=?",
+            (session.get("user_id"), branch_id), one=True,
+        )
+        if branch_access and branch_access["status"] != "نشط":
+            return False
+        if branch_access:
+            perms = branch_access["permissions"]
+        else:
+            perms = session.get("permissions")
+    else:
+        perms = session.get("permissions")
     if perms is None:
         return False
     if perms == "all":
@@ -200,6 +218,16 @@ def user_has_permission(module):
     if module in {"shift_start", "shift_end"} and "shift" in granted:
         return True
     return module in granted
+
+
+def accessible_branches_for_user():
+    if session.get("role") == "مدير":
+        return query("SELECT * FROM branches WHERE status!='معطل' ORDER BY id")
+    return query(
+        """SELECT b.* FROM branches b JOIN user_branch_permissions ubp ON ubp.branch_id=b.id
+           WHERE ubp.user_id=? AND ubp.status='نشط' AND b.status!='معطل' ORDER BY b.id""",
+        (session.get("user_id"),),
+    )
 
 
 def resolve_endpoint_permission():
@@ -228,6 +256,10 @@ def enforce_permissions():
         return None
     if session.get("role") == "مدير" or request.endpoint in OPEN_ENDPOINTS:
         return None
+    if request.endpoint == "branch_select":
+        bid = request.form.get("branch_id")
+        if query("SELECT 1 FROM user_branch_permissions WHERE user_id=? AND branch_id=? AND status='نشط'", (session.get("user_id"), bid), one=True):
+            return None
     module = resolve_endpoint_permission()
     if module and not user_has_permission(module):
         if request.path.startswith("/api/"):
@@ -926,6 +958,14 @@ def init_db():
             address TEXT,
             phone TEXT
         );
+        CREATE TABLE IF NOT EXISTS user_branch_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+            permissions TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'نشط',
+            UNIQUE(user_id, branch_id)
+        );
         CREATE TABLE IF NOT EXISTS installments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             customer_id INTEGER NOT NULL,
@@ -1254,6 +1294,11 @@ def init_db():
     conn.execute("UPDATE branches SET is_default=0")
     conn.execute("UPDATE branches SET is_default=1 WHERE name='الفرع الرئيسي' OR id=(SELECT MIN(id) FROM branches)")
     main_branch_id = conn.execute("SELECT id FROM branches WHERE is_default=1 ORDER BY id LIMIT 1").fetchone()[0]
+    conn.execute(
+        """INSERT OR IGNORE INTO user_branch_permissions (user_id, branch_id, permissions, status)
+           SELECT id, COALESCE(branch_id, ?), permissions, 'نشط' FROM users""",
+        (main_branch_id,),
+    )
     # Legacy rows are assigned to the default branch.
     for table in ("users", "employees", "invoices", "quotes", "shifts", "production_orders", "stock_moves", "stock_counts"):
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]:
@@ -2379,7 +2424,7 @@ def inject():
         "user": session.get("user"),
         "role": session.get("role"),
         "current_branch": current_branch() if session.get("user") else None,
-        "branches": query("SELECT * FROM branches WHERE status!='معطل' ORDER BY id") if session.get("user") else [],
+        "branches": accessible_branches_for_user() if session.get("user") else [],
         "kind": (request.view_args or {}).get("kind"),
         "print_settings": all_settings() if session.get("user") else {},
         "open_shift": current_shift() if session.get("user") else None,
@@ -3007,13 +3052,24 @@ def delete_supplier(sid):
 
 @app.route("/branches", methods=["GET", "POST"])
 @login_required
+@admin_required
 def branches():
     if request.method == "POST":
         action = request.form.get("action", "save")
         try:
             if action == "assign_user":
                 execute("UPDATE users SET branch_id=? WHERE id=?", (request.form.get("branch_id") or None, request.form.get("user_id")))
+                uid = int(request.form.get("user_id") or 0)
+                bid = int(request.form.get("branch_id") or 0)
+                target_perms = ",".join(k for k in request.form.getlist("branch_permissions") if k in PERMISSION_KEYS)
+                execute("INSERT INTO user_branch_permissions (user_id, branch_id, permissions, status) VALUES (?,?,?,'نشط') ON CONFLICT(user_id, branch_id) DO UPDATE SET permissions=excluded.permissions, status='نشط'", (uid, bid, target_perms))
                 flash("تم ربط المستخدم بالفرع", "ok")
+            elif action == "save_branch_permissions":
+                uid = int(request.form.get("user_id") or 0)
+                bid = int(request.form.get("branch_id") or 0)
+                target_perms = ",".join(k for k in request.form.getlist("branch_permissions") if k in PERMISSION_KEYS)
+                execute("INSERT INTO user_branch_permissions (user_id, branch_id, permissions, status) VALUES (?,?,?,'نشط') ON CONFLICT(user_id, branch_id) DO UPDATE SET permissions=excluded.permissions, status='نشط'", (uid, bid, target_perms))
+                flash("تم حفظ صلاحيات المستخدم لهذا الفرع", "ok")
             elif action == "toggle":
                 bid = int(request.form["branch_id"])
                 if bid == current_branch_id():
@@ -3038,19 +3094,20 @@ def branches():
         except (ValueError, sqlite3.IntegrityError) as exc:
             flash(str(exc), "err")
         return redirect(url_for("branches"))
-    return render_template("branches.html", branches=query("SELECT * FROM branches ORDER BY id"), users=query("SELECT id,username,full_name,role,branch_id FROM users ORDER BY full_name"), warehouses=query("SELECT id,name,branch FROM warehouses ORDER BY id"))
+    branch_rows = query("SELECT ubp.*, b.name branch_name, u.username, u.full_name FROM user_branch_permissions ubp JOIN branches b ON b.id=ubp.branch_id JOIN users u ON u.id=ubp.user_id ORDER BY u.full_name, b.id")
+    return render_template("branches.html", branches=query("SELECT * FROM branches ORDER BY id"), users=query("SELECT id,username,full_name,role,branch_id FROM users ORDER BY full_name"), warehouses=query("SELECT id,name,branch FROM warehouses ORDER BY id"), branch_rows=branch_rows, permission_modules=PERMISSION_MODULES)
 
 @app.route("/branches/select", methods=["POST"])
 @login_required
 def branch_select():
-    if session.get("role") != "مدير":
-        flash("اختيار الفرع متاح للمدير فقط", "err")
-        return redirect(request.referrer or url_for("dashboard"))
     bid = request.form.get("branch_id")
     branch = query("SELECT id FROM branches WHERE id=? AND status!='معطل'", (bid,), one=True)
-    if branch:
+    allowed = session.get("role") == "مدير" or query("SELECT 1 FROM user_branch_permissions WHERE user_id=? AND branch_id=? AND status='نشط'", (session.get("user_id"), bid), one=True)
+    if branch and allowed:
         session["branch_id"] = branch["id"]
         flash("تم تغيير الفرع الحالي", "ok")
+    else:
+        flash("لا تملك صلاحية الوصول إلى هذا الفرع", "err")
     return redirect(request.referrer or url_for("dashboard"))
 
 @app.route("/branches/transfer", methods=["POST"])
@@ -3349,9 +3406,12 @@ def settings():
             else:
                 try:
                     execute(
-                        "INSERT INTO users (username, password, full_name, role, permissions) VALUES (?,?,?,?,?)",
-                        (username, password, full_name, role, perms),
+                        "INSERT INTO users (username, password, full_name, role, permissions, branch_id) VALUES (?,?,?,?,?,?)",
+                        (username, password, full_name, role, perms, current_branch_id()),
                     )
+                    new_user = query("SELECT id FROM users WHERE username=?", (username,), one=True)
+                    if new_user and current_branch_id():
+                        execute("INSERT OR IGNORE INTO user_branch_permissions (user_id, branch_id, permissions, status) VALUES (?,?,?,'نشط')", (new_user["id"], current_branch_id(), perms))
                     flash("تم إضافة المستخدم", "ok")
                 except sqlite3.IntegrityError:
                     flash("اسم المستخدم موجود مسبقاً", "err")

@@ -81,6 +81,25 @@
     if (desc) desc.value = p.name;
     if (cost) cost.value = p.cost;
     if (price) price.value = p.price;
+    updateLineTotal(tr);
+  }
+
+  function updateLineTotal(row) {
+    if (!row) return;
+    const qty = parseFloat((row.querySelector('[name="item_qty[]"]') || {}).value) || 0;
+    const price = parseFloat((row.querySelector('[name="item_price[]"]') || {}).value) || 0;
+    const total = row.querySelector('.line-total');
+    if (total) total.textContent = (qty * price).toFixed(2);
+  }
+
+  function bindLineTotal(row) {
+    if (!row || row.dataset.totalBound) return;
+    row.dataset.totalBound = "1";
+    row.querySelectorAll('[name="item_qty[]"], [name="item_price[]"]').forEach(function (input) {
+      input.addEventListener("input", function () { updateLineTotal(row); });
+      input.addEventListener("change", function () { updateLineTotal(row); });
+    });
+    updateLineTotal(row);
   }
 
   function setField(name, value) {
@@ -131,6 +150,7 @@
     const node = tpl.content.cloneNode(true);
     document.querySelector("#items tbody").appendChild(node);
     const row = document.querySelector("#items tbody tr:last-child");
+    bindLineTotal(row);
     const search = row.querySelector(".item-search");
     if (search) {
       attachSuggest(search, {
@@ -145,6 +165,7 @@
 
   function bindExistingRows() {
     document.querySelectorAll("#items tbody tr").forEach(function (row) {
+      bindLineTotal(row);
       const search = row.querySelector(".item-search");
       if (search && !search.dataset.bound) {
         search.dataset.bound = "1";

@@ -44,7 +44,7 @@
     <div class="panel-b">
       <table id="items">
         <thead>
-          <tr><th>المنتج</th><th>الوصف</th><th>الكمية</th><th>التكلفة</th><th>السعر</th><th></th></tr>
+              <tr><th>المنتج</th><th>الوصف</th><th>الكمية</th><th>التكلفة</th><th>سعر الوحدة</th><th>إجمالي الصنف</th><th></th></tr>
         </thead>
         <tbody>
           {% if related %}
@@ -58,6 +58,7 @@
               <td><input name="item_qty[]" type="number" step="0.01" value="{{ it.qty }}"></td>
               <td><input name="item_cost[]" type="number" step="0.01" value="{{ it.unit_cost }}"></td>
               <td><input name="item_price[]" type="number" step="0.01" value="{{ it.unit_price }}"></td>
+              <td class="line-total money">{{ (it.qty * it.unit_price)|money }}</td>
               <td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove()">حذف</button></td>
             </tr>
             {% endfor %}
@@ -78,6 +79,7 @@
     <td><input name="item_qty[]" type="number" step="0.01" value="1"></td>
     <td><input name="item_cost[]" type="number" step="0.01" value="0"></td>
     <td><input name="item_price[]" type="number" step="0.01" value="0"></td>
+    <td class="line-total money">0.00</td>
     <td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove()">حذف</button></td>
   </tr>
 </template>

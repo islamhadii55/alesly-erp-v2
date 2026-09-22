@@ -11,6 +11,43 @@
 {% block content %}
 <div class="dashboard-page">
 
+  <section class="parts-hero">
+    <div class="parts-hero-copy">
+      <span class="parts-kicker">حلول متخصصة لقطاع السيارات</span>
+      <h1>إدارة قطع الغيار بدقة وسرعة</h1>
+      <p>من تعريف القطعة بالماركة والموديل والبارت نمبر، إلى المخزون والمبيعات والعملاء — كل ما تحتاجه في شاشة واحدة.</p>
+      <div class="parts-hero-actions">
+        <a class="parts-cta" href="{{ url_for('pos') }}">ابدأ عملية بيع</a>
+        <a class="parts-link" href="{{ url_for('inventory') }}">استعراض المخزون <span>←</span></a>
+      </div>
+    </div>
+    <div class="parts-hero-art" aria-hidden="true">
+      <span class="parts-wheel parts-wheel-one"></span>
+      <span class="parts-wheel parts-wheel-two"></span>
+      <span class="parts-hero-line"></span>
+      <strong>ERP</strong>
+    </div>
+  </section>
+
+  <section class="parts-feature-strip" aria-label="أهم أدوات قطع الغيار">
+    <a class="parts-feature" href="{{ url_for('inventory') }}">
+      <span class="parts-feature-icon">▦</span>
+      <span><b>مخزون منظم</b><small>كروت الأصناف والحركات</small></span>
+    </a>
+    <a class="parts-feature" href="{{ url_for('customers') }}">
+      <span class="parts-feature-icon">♙</span>
+      <span><b>عملاء وموردون</b><small>حسابات ومتابعة المديونيات</small></span>
+    </a>
+    <a class="parts-feature" href="{{ url_for('reports') }}">
+      <span class="parts-feature-icon">▥</span>
+      <span><b>تقارير واضحة</b><small>قرارات أسرع بأرقام دقيقة</small></span>
+    </a>
+    <a class="parts-feature" href="{{ url_for('invoices_list', kind='sale') }}">
+      <span class="parts-feature-icon">⌁</span>
+      <span><b>مبيعات وفواتير</b><small>بيع وصيانة ومرتجعات</small></span>
+    </a>
+  </section>
+
   <section class="dash-company">
     <div class="dash-company-glow dash-company-glow-a"></div>
     <div class="dash-company-glow dash-company-glow-b"></div>

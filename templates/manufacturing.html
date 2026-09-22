@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% set title = "التصنيع وأوامر الإنتاج" %}
+{% block content %}
+<div class="cards">
+  <div class="card kpi"><div class="label">المواد الخام</div><div class="value">{{ materials|length }}</div></div>
+  <div class="card kpi"><div class="label">أوامر الإنتاج</div><div class="value">{{ orders|length }}</div></div>
+  <div class="card kpi"><div class="label">الأمر المحدد</div><div class="value">{{ selected.status if selected else '—' }}</div></div>
+</div>
+<div class="split">
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>إضافة مادة خام</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('manufacturing') }}" class="form-grid">
+          <input type="hidden" name="action" value="add_material">
+          <div class="field"><label>الكود</label><input name="code" required placeholder="RM-001"></div>
+          <div class="field"><label>اسم المادة</label><input name="name" required></div>
+          <div class="field"><label>الوحدة</label><input name="unit" value="قطعة"></div>
+          <div class="field"><label>التكلفة</label><input name="cost" type="number" step="0.01" min="0" value="0"></div>
+          <div class="field"><label>الكمية الحالية</label><input name="qty" type="number" step="0.01" min="0" value="0"></div>
+          <div class="field"><label>حد الطلب</label><input name="min_qty" type="number" step="0.01" min="0" value="0"></div>
+          <div class="field full"><label>ملاحظات</label><input name="notes"></div>
+          <div class="actions"><button class="btn btn-gold">حفظ المادة</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>المواد الخام</h3></div>
+      <div class="panel-b">
+        <table class="inv-table"><thead><tr><th>الكود</th><th>المادة</th><th>الوحدة</th><th>الكمية</th><th>التكلفة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+        {% for m in materials %}<tr><td>{{ m.code }}</td><td>{{ m.name }}</td><td>{{ m.unit }}</td><td class="{{ 'text-danger' if m.qty <= m.min_qty else '' }}">{{ m.qty }}</td><td>{{ m.cost|money }}</td><td>{{ m.status }}</td><td><form method="post" action="{{ url_for('manufacturing_material_delete', material_id=m.id) }}" onsubmit="return confirm('حذف المادة؟')"><button class="btn btn-ghost" type="submit">حذف</button></form></td></tr>{% else %}<tr><td colspan="7" class="muted">لا توجد مواد خام.</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h3>قائمة مواد (BOM)</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('manufacturing') }}" class="form-grid">
+          <input type="hidden" name="action" value="save_bom">
+          <div class="field"><label>المنتج النهائي</label><select name="bom_product_id" required><option value="">اختر المنتج</option>{% for p in products %}<option value="{{ p.id }}">{{ p.sku }} — {{ p.name }}</option>{% endfor %}</select></div>
+          <div class="field"><label>الإصدار</label><input name="version" value="1"></div>
+          <div class="field"><label>عمالة لكل أمر</label><input name="bom_labor_cost" type="number" step="0.01" value="0"></div>
+          <div class="field"><label>مصروفات صناعية لكل أمر</label><input name="bom_overhead_cost" type="number" step="0.01" value="0"></div>
+          {% for row in range(3) %}<div class="field"><label>المادة الخام {{ row + 1 }}</label><select name="bom_material_id[]"><option value="">اختر المادة</option>{% for m in materials %}<option value="{{ m.id }}">{{ m.code }} — {{ m.name }}</option>{% endfor %}</select></div>
+          <div class="field"><label>الكمية لكل منتج</label><input name="bom_material_qty[]" type="number" step="0.0001" min="0" value="{{ 1 if row == 0 else 0 }}"></div>{% endfor %}
+          <div class="field full"><label>ملاحظات</label><input name="bom_notes"></div>
+          <div class="actions"><button class="btn btn-gold">حفظ قائمة المواد</button></div>
+        </form>
+        <table class="inv-table" style="margin-top:12px"><thead><tr><th>المنتج</th><th>الإصدار</th><th>العمالة</th><th>المصروفات</th><th>الحالة</th></tr></thead><tbody>{% for b in boms %}<tr><td>{{ b.sku }} — {{ b.product_name }}</td><td>{{ b.version }}</td><td>{{ b.labor_cost|money }}</td><td>{{ b.overhead_cost|money }}</td><td>{{ b.status }}</td></tr>{% else %}<tr><td colspan="5" class="muted">لا توجد قوائم مواد.</td></tr>{% endfor %}</tbody></table>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>فتح أمر تصنيع</h3></div>
+      <div class="panel-b">
+        <form method="post" action="{{ url_for('manufacturing') }}" class="form-grid">
+          <input type="hidden" name="action" value="open_order">
+          <div class="field full"><label>المنتج النهائي</label><select name="product_id" required><option value="">اختر المنتج</option>{% for p in products %}<option value="{{ p.id }}">{{ p.sku }} — {{ p.name }} (الرصيد {{ p.qty }})</option>{% endfor %}</select></div>
+          <div class="field"><label>الكمية المخططة</label><input name="planned_qty" type="number" step="0.01" min="0.01" required></div>
+          <div class="field"><label>المخزن</label><select name="warehouse_id"><option value="">الرئيسي</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+          <div class="field"><label>العمالة للأمر</label><input name="labor_cost" type="number" step="0.01" value="0"></div>
+          <div class="field"><label>المصروفات الصناعية</label><input name="overhead_cost" type="number" step="0.01" value="0"></div>
+          <div class="field full"><label>ملاحظات</label><input name="order_notes"></div>
+          <div class="actions"><button class="btn btn-gold">فتح الأمر</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h3>أوامر التصنيع</h3></div>
+      <div class="panel-b"><table class="inv-table"><thead><tr><th>الرقم</th><th>المنتج</th><th>المخطط</th><th>المنجز</th><th>الحالة</th></tr></thead><tbody>{% for o in orders %}<tr class="{{ 'selected-row' if selected and selected.id == o.id else '' }}"><td><a href="{{ url_for('manufacturing', order_id=o.id) }}">{{ o.number }}</a></td><td>{{ o.product_name }}</td><td>{{ o.planned_qty }}</td><td>{{ o.completed_qty }}</td><td>{{ o.status }}</td></tr>{% else %}<tr><td colspan="5" class="muted">لا توجد أوامر تصنيع.</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+    {% if selected %}
+    <div class="panel">
+      <div class="panel-h"><h3>الأمر {{ selected.number }} — {{ selected.product_name if selected.product_name else '' }}</h3><span class="badge b-paid">{{ selected.status }}</span></div>
+      <div class="panel-b">
+        <div class="cards"><div class="card kpi"><div class="label">مواد</div><div class="value">{{ cost.material|money }}</div></div><div class="card kpi"><div class="label">عمالة</div><div class="value">{{ cost.labor|money }}</div></div><div class="card kpi"><div class="label">هالك</div><div class="value">{{ cost.waste|money }}</div></div><div class="card kpi"><div class="label">الإجمالي</div><div class="value">{{ (cost.material + cost.labor + cost.overhead + cost.waste)|money }}</div></div></div>
+        <h4>مراحل الأمر</h4><table class="inv-table"><thead><tr><th>المرحلة</th><th>التسلسل</th><th>الحالة</th><th>بدأت</th><th>انتهت</th></tr></thead><tbody>{% for s in stages %}<tr><td>{{ s.name }}</td><td>{{ s.sequence }}</td><td>{{ s.status }}</td><td>{{ s.started_at or '—' }}</td><td>{{ s.ended_at or '—' }}</td></tr>{% endfor %}</tbody></table>
+        <div class="actions" style="flex-wrap:wrap;margin:12px 0">{% if selected.status not in ('قيد التشغيل','مكتمل') %}<form method="post" action="{{ url_for('manufacturing_start', order_id=selected.id) }}"><button class="btn btn-navy">بدء الأمر</button></form>{% endif %}{% if selected.status in ('مفتوح','قيد التشغيل') %}<form method="post" action="{{ url_for('manufacturing_issue', order_id=selected.id) }}"><button class="btn btn-gold">صرف المواد حسب BOM</button></form>{% endif %}</div>
+        {% if selected.status in ('مفتوح','قيد التشغيل') %}<div class="form-grid"><form method="post" action="{{ url_for('manufacturing_waste', order_id=selected.id) }}" class="form-grid"><div class="field"><label>المادة الهالكة</label><select name="raw_material_id" required>{% for m in materials %}<option value="{{ m.id }}">{{ m.code }} — {{ m.name }}</option>{% endfor %}</select></div><div class="field"><label>كمية الهالك</label><input name="qty" type="number" step="0.01" min="0.01" required></div><div class="actions"><button class="btn btn-ghost">تسجيل هالك</button></div></form><form method="post" action="{{ url_for('manufacturing_finish', order_id=selected.id) }}" class="form-grid"><div class="field"><label>الكمية المنجزة</label><input name="completed_qty" type="number" step="0.01" min="0.01" value="{{ selected.planned_qty }}" required></div><div class="actions"><button class="btn btn-gold">إنهاء وإضافة المنتج للمخزون</button></div></form></div>{% endif %}
+        <h4>حركات المواد</h4><table class="inv-table"><thead><tr><th>المادة</th><th>النوع</th><th>الكمية</th><th>التكلفة</th><th>التاريخ</th></tr></thead><tbody>{% for m in moves %}<tr><td>{{ m.code }} — {{ m.material_name }}</td><td>{{ m.move_type }}</td><td>{{ m.qty }}</td><td>{{ m.unit_cost|money }}</td><td>{{ m.date }}</td></tr>{% else %}<tr><td colspan="5" class="muted">لا توجد حركات.</td></tr>{% endfor %}</tbody></table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

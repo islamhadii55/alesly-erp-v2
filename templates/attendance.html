@@ -20,7 +20,7 @@
       {% for r in rows %}<tr>
         <td>{{ r.attendance_date }}</td><td>{{ r.name }}</td>
         <td><span class="badge {% if r.status=='حاضر' %}b-paid{% else %}b-void{% endif %}">{{ r.status }}</span></td>
-        <td>{{ r.started_at or '—' }}</td><td>{{ r.ended_at or '—' }}</td><td>{{ r.late_minutes }}</td><td>{{ r.notes or '' }}</td>
+        <td>{{ r.started_at|time12 }}</td><td>{{ r.ended_at|time12 }}</td><td>{{ r.late_minutes }}</td><td>{{ r.notes or '' }}</td>
       </tr>{% else %}<tr><td colspan="7">لا توجد سجلات لهذا الشهر.</td></tr>{% endfor %}
     </table>
   </div>

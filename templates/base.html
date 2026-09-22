@@ -27,6 +27,7 @@
         {% if can('sales') %}<a href="{{ url_for('invoice_new', kind='sale') }}"><span>＋</span> فاتورة بيع</a>{% endif %}
         {% if can('purchases') %}<a href="{{ url_for('invoice_new', kind='purchase') }}"><span>⇩</span> فاتورة شراء</a>{% endif %}
         {% if can('inventory') %}<a class="{{ nav_active('inventory') }}" href="{{ url_for('inventory') }}"><span>▦</span> كارت الصنف والمخزون</a><a href="{{ url_for('inventory_shortages') }}"><span>!</span> نواقص المخزون</a>{% endif %}
+        {% if can('manufacturing') %}<a class="{{ nav_active('manufacturing') }}" href="{{ url_for('manufacturing') }}"><span>⚙</span> التصنيع</a>{% endif %}
         {% if can('reports') %}<a class="{{ nav_active('reports') }}" href="{{ url_for('reports') }}"><span>▥</span> التقارير</a>{% endif %}
         {% if can('parties') %}<a href="{{ url_for('customers') }}"><span>♙</span> العملاء</a>{% endif %}
         <div class="quick-nav-divider"></div>
@@ -46,6 +47,7 @@
         </div></details>
         <details><summary>الأصناف والمخزون</summary><div class="menu-dropdown">
           {% if can('inventory') %}<a href="{{ url_for('inventory') }}">كارت الصنف</a><a href="{{ url_for('inventory_shortages') }}">النواقص وحد الطلب</a>{% endif %}
+          {% if can('manufacturing') %}<a href="{{ url_for('manufacturing') }}">التصنيع وأوامر الإنتاج</a>{% endif %}
           {% if can('parties') %}<a href="{{ url_for('customers') }}">العملاء</a><a href="{{ url_for('suppliers') }}">الموردون</a>{% endif %}{% if can('jobs') %}<a href="{{ url_for('jobs') }}">أوامر الشغل والصيانة</a>{% endif %}
         </div></details>
         <details><summary>الحسابات والتقارير</summary><div class="menu-dropdown">
@@ -55,7 +57,7 @@
         <a class="menu-search-link" href="{{ url_for('inventory') }}">بحث عن قطعة</a>
       </nav>
       <div class="toolbar-green">
-        {% if can('pos') %}<a class="tb-btn" href="{{ url_for('pos') }}">كاشير</a>{% endif %}{% if can('sales') %}<a class="tb-btn" href="{{ url_for('invoice_new', kind='sale') }}">فاتورة بيع</a><a class="tb-btn" href="{{ url_for('invoice_new', kind='maintenance') }}">صيانة</a><a class="tb-btn" href="{{ url_for('invoices_list', kind='sale_return') }}">مرتجع</a>{% endif %}{% if can('purchases') %}<a class="tb-btn" href="{{ url_for('invoice_new', kind='purchase') }}">مشتريات</a>{% endif %}{% if can('inventory') %}<a class="tb-btn" href="{{ url_for('inventory') }}">المخزون</a>{% endif %}{% if can('reports') %}<a class="tb-btn tb-alt" href="{{ url_for('reports') }}">التقارير</a>{% endif %}
+        {% if can('pos') %}<a class="tb-btn" href="{{ url_for('pos') }}">كاشير</a>{% endif %}{% if can('sales') %}<a class="tb-btn" href="{{ url_for('invoice_new', kind='sale') }}">فاتورة بيع</a><a class="tb-btn" href="{{ url_for('invoice_new', kind='maintenance') }}">صيانة</a><a class="tb-btn" href="{{ url_for('invoices_list', kind='sale_return') }}">مرتجع</a>{% endif %}{% if can('purchases') %}<a class="tb-btn" href="{{ url_for('invoice_new', kind='purchase') }}">مشتريات</a>{% endif %}{% if can('inventory') %}<a class="tb-btn" href="{{ url_for('inventory') }}">المخزون</a>{% endif %}{% if can('manufacturing') %}<a class="tb-btn" href="{{ url_for('manufacturing') }}">التصنيع</a>{% endif %}{% if can('reports') %}<a class="tb-btn tb-alt" href="{{ url_for('reports') }}">التقارير</a>{% endif %}
       </div>
       <div class="navy-bar"><div class="global-search"><input data-suggest="product" data-goto-product="1" placeholder="بحث سريع عن صنف أو باركود..."></div>{% if quick_stats %}<span class="navy-field">قيمة المخزون <b>{{ quick_stats.stock_value|money }}</b></span><span class="navy-field">حسابات العملاء <b>{{ quick_stats.customers_due|money }}</b></span><span class="navy-field">نقص المخزون <b>{{ quick_stats.low_stock }}</b></span>{% endif %}</div>
       <div class="topbar"><div><h2>{{ title or APP_NAME }}</h2><div class="meta">{{ session.get('full_name', user) }} · {{ role or '' }} · {{ today }}</div></div><div class="actions"><span id="offline-badge" class="badge b-paid">متصل</span>{% if open_shift %}<span class="badge b-paid">وردية مفتوحة</span>{% else %}<span class="badge b-void">لا وردية</span>{% endif %}{% block actions %}{% endblock %}</div></div>
@@ -66,7 +68,7 @@
   </div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script><script src="{{ url_for('static', filename='js/offline.js') }}"></script>
   <script>(function(){var side=document.querySelector('.sidebar'),toggle=document.getElementById('sidebar-toggle');if(side&&toggle){var key='alasly-sidebar-collapsed';if(localStorage.getItem(key)==='1')side.classList.add('is-collapsed');function sync(){var c=side.classList.contains('is-collapsed');toggle.textContent=c?'▶':'◀';toggle.setAttribute('aria-label',c?'فتح الشريط الجانبي':'طي الشريط الجانبي');}toggle.addEventListener('click',function(){side.classList.toggle('is-collapsed');localStorage.setItem(key,side.classList.contains('is-collapsed')?'1':'0');sync();});sync();}})();</script>
-  <script>(function(){var node=document.getElementById("win-clock");if(!node)return;function tick(){var d=new Date();node.textContent=d.toLocaleDateString("ar-EG")+" — "+d.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}tick();setInterval(tick,1000);})();</script>
+  <script>(function(){var node=document.getElementById("win-clock");if(!node)return;function tick(){var d=new Date();node.textContent=d.toLocaleDateString("ar-EG")+" — "+d.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true});}tick();setInterval(tick,1000);})();</script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set title = "مراجعة خصومات الحضور الشهرية" %}
+{% block actions %}<a class="btn btn-ghost" href="{{ url_for('salaries') }}">الرواتب</a>{% endblock %}
+{% block content %}
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>اختيار الشهر</h3><form method="get"><input type="month" name="period" value="{{ period }}"><button class="btn btn-gold">عرض</button></form></div>
+</div>
+<div class="cards"><div class="card kpi"><div class="label">إجمالي الخصومات المقترحة — {{ period }}</div><div class="value down">{{ total_deduct|money }}</div><div class="hint">لا يتم الخصم إلا بعد اعتماد الخصم عند صرف الراتب.</div></div></div>
+<div class="panel">
+  <div class="panel-h"><h3>كشف الخصومات قبل الصرف</h3></div>
+  <div class="panel-b"><table>
+    <tr><th>الموظف</th><th>الراتب</th><th>اليومية</th><th>أيام الغياب</th><th>دقائق التأخير</th><th>خصم الغياب والتأخير</th><th>الصافي المتوقع</th></tr>
+    {% for r in rows %}<tr><td>{{ r.employee.name }}</td><td class="money">{{ r.employee.salary|money }}</td><td class="money">{{ r.daily|money }}</td><td>{{ r.absence_days }}</td><td>{{ r.late_minutes }}</td><td class="money {% if r.deduct %}down{% endif %}">{{ r.deduct|money }}</td><td class="money">{{ r.net_before_bonus|money }}</td></tr>{% else %}<tr><td colspan="7">لا يوجد موظفون نشطون.</td></tr>{% endfor %}
+  </table></div>
+</div>
+{% endblock %}

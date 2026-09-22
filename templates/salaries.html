@@ -3,7 +3,7 @@
 {% block content %}
 <div class="cards"><div class="card kpi"><div class="label">إجمالي الرواتب المصروفة</div><div class="value">{{ total|money }}</div></div></div>
 <div class="panel" style="margin-bottom:14px">
-  <div class="panel-h"><h3>صرف راتب</h3></div>
+  <div class="panel-h"><h3>صرف راتب</h3><a class="btn btn-ghost" href="{{ url_for('payroll_deductions', period=today[:7]) }}">مراجعة الخصومات الشهرية</a></div>
   <div class="panel-b">
     <form method="post" class="form-grid">
       <div class="field"><label>الموظف</label>

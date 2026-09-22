@@ -19,6 +19,28 @@ try:
 except ImportError:
     XLSX_OK = False
 
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+    REPORTLAB_OK = True
+except ImportError:
+    REPORTLAB_OK = False
+
+
+def rtl_pdf(value):
+    text = str(value or "")
+    if not REPORTLAB_OK:
+        return text
+    return get_display(arabic_reshaper.reshape(text))
+
 APP_NAME = "الاصلي لتجارة قطع الغيار وخدمات صيانة السيارات"
 
 
@@ -59,6 +81,7 @@ PERMISSION_MODULES = (
     ("jobs", "أوامر الشغل", "المبيعات والورشة"),
     ("purchases", "فواتير الشراء ومرتجعاتها", "المشتريات"),
     ("inventory", "المخزون والأصناف", "المخزون والحسابات"),
+    ("manufacturing", "التصنيع وأوامر الإنتاج", "المخزون والحسابات"),
     ("parties", "العملاء والموردون", "المخزون والحسابات"),
     ("accounts", "حسابات العملاء والموردين", "المخزون والحسابات"),
     ("treasury", "الخزينة والورديات", "المخزون والحسابات"),
@@ -113,6 +136,12 @@ ENDPOINT_PERMISSIONS = {
     "inventory_count": "inventory",
     "inventory_serial": "inventory",
     "inventory_shortages": "inventory",
+    "manufacturing": "manufacturing",
+    "manufacturing_material_delete": "manufacturing",
+    "manufacturing_start": "manufacturing",
+    "manufacturing_issue": "manufacturing",
+    "manufacturing_waste": "manufacturing",
+    "manufacturing_finish": "manufacturing",
     "customers": "parties",
     "delete_customer": "parties",
     "suppliers": "parties",
@@ -127,6 +156,7 @@ ENDPOINT_PERMISSIONS = {
     "marketing": "marketing",
     "reports": "reports",
     "shift_reports": "reports",
+    "payroll_deductions": "attendance_review",
     "sync_center": "sync",
     "employees": "hr",
     "delete_employee": "hr",
@@ -253,7 +283,21 @@ def money(value):
         return "0.00"
 
 
+def time12(value):
+    if not value:
+        return "—"
+    text = str(value)
+    try:
+        parsed = datetime.strptime(text[:16], "%Y-%m-%d %H:%M")
+        suffix = "ص" if parsed.hour < 12 else "م"
+        hour = parsed.hour % 12 or 12
+        return f"{parsed.strftime('%Y-%m-%d')} {hour:02d}:{parsed.minute:02d} {suffix}"
+    except ValueError:
+        return text
+
+
 app.jinja_env.filters["money"] = money
+app.jinja_env.filters["time12"] = time12
 
 
 def login_required(fn):
@@ -934,6 +978,72 @@ def init_db():
             status TEXT NOT NULL,
             message TEXT,
             created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS raw_materials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            unit TEXT NOT NULL DEFAULT 'قطعة',
+            cost REAL NOT NULL DEFAULT 0,
+            qty REAL NOT NULL DEFAULT 0,
+            min_qty REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'فعال',
+            notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS manufacturing_boms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            version TEXT NOT NULL DEFAULT '1',
+            status TEXT NOT NULL DEFAULT 'فعال',
+            labor_cost REAL NOT NULL DEFAULT 0,
+            overhead_cost REAL NOT NULL DEFAULT 0,
+            notes TEXT,
+            UNIQUE(product_id, version)
+        );
+        CREATE TABLE IF NOT EXISTS manufacturing_bom_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bom_id INTEGER NOT NULL REFERENCES manufacturing_boms(id) ON DELETE CASCADE,
+            raw_material_id INTEGER NOT NULL REFERENCES raw_materials(id),
+            qty REAL NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS production_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            number TEXT UNIQUE NOT NULL,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            planned_qty REAL NOT NULL DEFAULT 0,
+            completed_qty REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'مفتوح',
+            current_stage TEXT,
+            opened_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            labor_cost REAL NOT NULL DEFAULT 0,
+            overhead_cost REAL NOT NULL DEFAULT 0,
+            waste_cost REAL NOT NULL DEFAULT 0,
+            warehouse_id INTEGER,
+            notes TEXT,
+            created_by TEXT
+        );
+        CREATE TABLE IF NOT EXISTS production_stages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL REFERENCES production_orders(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            sequence INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'معلق',
+            started_at TEXT,
+            ended_at TEXT,
+            notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS raw_material_moves (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raw_material_id INTEGER NOT NULL REFERENCES raw_materials(id),
+            qty REAL NOT NULL,
+            move_type TEXT NOT NULL,
+            reference_type TEXT,
+            reference_id INTEGER,
+            unit_cost REAL NOT NULL DEFAULT 0,
+            date TEXT NOT NULL,
+            created_by TEXT
         );
         """
     )
@@ -3821,6 +3931,99 @@ def shift_reports():
     )
 
 
+def shift_report_data(report_day):
+    shift_rows = query(
+        """SELECT s.*, COALESCE(e.name, s.username) employee_name, e.job_title,
+                  COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
+                  COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
+           FROM shifts s LEFT JOIN employees e ON e.id=s.employee_id
+           LEFT JOIN invoices v ON v.shift_id=s.id AND v.kind IN ('sale','maintenance') AND v.status!='ملغاة'
+           WHERE substr(s.started_at,1,10)=? GROUP BY s.id ORDER BY s.started_at DESC""", (report_day,)
+    )
+    employee_totals = query(
+        """SELECT COALESCE(e.name, v.salesperson) employee_name, v.salesperson,
+                  COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
+                  COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
+           FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson
+           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?
+           GROUP BY v.salesperson, e.name ORDER BY sales_total DESC""", (report_day + "%",)
+    )
+    invoices = query(
+        """SELECT v.number, v.date, v.kind, v.party_name, v.total, v.paid, v.profit,
+                  v.salesperson, COALESCE(e.name, v.salesperson) employee_name, v.shift_id
+           FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson
+           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?
+           ORDER BY v.id DESC""", (report_day + "%",)
+    )
+    return shift_rows, employee_totals, invoices
+
+
+@app.route("/reports/shifts/export.xlsx")
+@login_required
+def shift_report_export_excel():
+    report_day = request.args.get("date") or date.today().isoformat()
+    shift_rows, employee_totals, invoices = shift_report_data(report_day)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "ملخص الموظفين"
+    ws.append(["تقرير الورديات والمبيعات", report_day])
+    ws.append(["الموظف", "عدد الفواتير", "إجمالي المبيعات", "المحصل", "الربح"])
+    for r in employee_totals:
+        ws.append([r["employee_name"] or "غير محدد", r["invoice_count"], r["sales_total"], r["sales_paid"], r["sales_profit"]])
+    ws2 = wb.create_sheet("الورديات")
+    ws2.append(["الموظف", "بدء الوردية", "إنهاء الوردية", "الفواتير", "المبيعات", "المحصل", "الربح"])
+    for r in shift_rows:
+        ws2.append([r["employee_name"], time12(r["started_at"]), time12(r["ended_at"]), r["invoice_count"], r["sales_total"], r["sales_paid"], r["sales_profit"]])
+    ws3 = wb.create_sheet("الفواتير")
+    ws3.append(["الفاتورة", "التاريخ", "النوع", "الموظف", "العميل", "الوردية", "الإجمالي", "المحصل", "الربح"])
+    for r in invoices:
+        ws3.append([r["number"], r["date"], KIND_LABELS.get(r["kind"], r["kind"]), r["employee_name"], r["party_name"], r["shift_id"] or "غير مرتبطة", r["total"], r["paid"], r["profit"]])
+    for sheet in wb.worksheets:
+        sheet.freeze_panes = "A3"
+        for cell in sheet[1]:
+            cell.font = Font(bold=True)
+    return workbook_response(wb, f"تقرير-الورديات-{report_day}.xlsx")
+
+
+@app.route("/reports/shifts/export.pdf")
+@login_required
+def shift_report_export_pdf():
+    if not REPORTLAB_OK:
+        flash("تصدير PDF غير متاح حاليًا، استخدم Excel أو ثبّت مكتبة PDF", "err")
+        return redirect(url_for("shift_reports", date=request.args.get("date")))
+    report_day = request.args.get("date") or date.today().isoformat()
+    shift_rows, employee_totals, invoices = shift_report_data(report_day)
+    stream = io.BytesIO()
+    doc = SimpleDocTemplate(stream, pagesize=landscape(A4), rightMargin=24, leftMargin=24, topMargin=24, bottomMargin=24)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="Arabic", parent=styles["Normal"], fontName="DejaVu", fontSize=9, leading=12, alignment=2))
+    story = [Paragraph(rtl_pdf(f"تقرير الورديات والمبيعات — {report_day}"), styles["Title"]), Spacer(1, 12)]
+    table_data = [[rtl_pdf(x) for x in ["الموظف", "الفواتير", "المبيعات", "المحصل", "الربح"]]]
+    for r in employee_totals:
+        table_data.append([rtl_pdf(str(r["employee_name"] or "غير محدد")), str(r["invoice_count"]), money(r["sales_total"]), money(r["sales_paid"]), money(r["sales_profit"])])
+    story.append(Table(table_data, repeatRows=1, hAlign="RIGHT"))
+    story.append(Spacer(1, 14))
+    shift_data = [[rtl_pdf(x) for x in ["الموظف", "البداية", "النهاية", "الفواتير", "المبيعات", "المحصل", "الربح"]]]
+    for r in shift_rows:
+        shift_data.append([rtl_pdf(str(r["employee_name"])), time12(r["started_at"]), time12(r["ended_at"]), str(r["invoice_count"]), money(r["sales_total"]), money(r["sales_paid"]), money(r["sales_profit"])])
+    story.append(Table(shift_data, repeatRows=1, hAlign="RIGHT"))
+    doc.build(story)
+    stream.seek(0)
+    return send_file(stream, as_attachment=True, download_name=f"تقرير-الورديات-{report_day}.pdf", mimetype="application/pdf")
+
+
+@app.route("/reports/payroll-deductions")
+@login_required
+def payroll_deductions():
+    period = request.args.get("period") or date.today().strftime("%Y-%m")
+    emps = query("SELECT * FROM employees WHERE status='نشط' ORDER BY name")
+    rows = []
+    for emp in emps:
+        preview = attendance_preview(emp["id"], period)
+        rows.append({"employee": emp, **preview, "daily": round(float(emp["salary"] or 0) / 30.0, 2), "net_before_bonus": round(float(emp["salary"] or 0) - preview["deduct"], 2)})
+    return render_template("payroll_deductions.html", period=period, rows=rows, total_deduct=sum(r["deduct"] for r in rows))
+
+
 @app.route("/api/barcode")
 @login_required
 def api_barcode():
@@ -4419,6 +4622,213 @@ def journal():
     rows = query("SELECT * FROM journal_entries ORDER BY id DESC LIMIT 80")
     totals = query("SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c FROM journal_entries", one=True)
     return render_template("journal.html", rows=rows, totals=totals)
+
+
+def manufacturing_now():
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def manufacturing_order_cost(order_id):
+    row = query(
+        """SELECT COALESCE(SUM((-qty) * unit_cost),0) material_cost
+           FROM raw_material_moves
+           WHERE reference_type='production_order' AND reference_id=? AND move_type='صرف'""",
+        (order_id,), one=True,
+    )
+    waste = query("SELECT waste_cost, labor_cost, overhead_cost FROM production_orders WHERE id=?", (order_id,), one=True)
+    return {
+        "material": float(row["material_cost"] if row else 0),
+        "labor": float(waste["labor_cost"] if waste else 0),
+        "overhead": float(waste["overhead_cost"] if waste else 0),
+        "waste": float(waste["waste_cost"] if waste else 0),
+    }
+
+
+@app.route("/manufacturing", methods=["GET", "POST"])
+@login_required
+def manufacturing():
+    if request.method == "POST":
+        action = request.form.get("action")
+        try:
+            if action == "add_material":
+                code = (request.form.get("code") or "").strip()
+                name = (request.form.get("name") or "").strip()
+                if not code or not name:
+                    raise ValueError("أدخل كود واسم المادة الخام")
+                execute(
+                    """INSERT INTO raw_materials (code,name,unit,cost,qty,min_qty,status,notes)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (code, name, request.form.get("unit") or "قطعة", float(request.form.get("cost") or 0),
+                     float(request.form.get("qty") or 0), float(request.form.get("min_qty") or 0),
+                     request.form.get("status") or "فعال", request.form.get("notes")),
+                )
+                flash("تمت إضافة المادة الخام", "ok")
+            elif action == "delete_material":
+                mid = int(request.form.get("material_id") or 0)
+                if query("SELECT 1 FROM manufacturing_bom_items WHERE raw_material_id=?", (mid,), one=True):
+                    raise ValueError("لا يمكن حذف مادة مستخدمة في قائمة مواد")
+                execute("DELETE FROM raw_materials WHERE id=?", (mid,))
+                flash("تم حذف المادة الخام", "ok")
+            elif action == "save_bom":
+                product_id = int(request.form.get("bom_product_id") or 0)
+                if not query("SELECT id FROM products WHERE id=?", (product_id,), one=True):
+                    raise ValueError("اختر المنتج النهائي")
+                bom_id = execute(
+                    """INSERT INTO manufacturing_boms (product_id,version,status,labor_cost,overhead_cost,notes)
+                       VALUES (?,?,?,?,?,?)""",
+                    (product_id, request.form.get("version") or "1", request.form.get("bom_status") or "فعال",
+                     float(request.form.get("bom_labor_cost") or 0), float(request.form.get("bom_overhead_cost") or 0), request.form.get("bom_notes")),
+                )
+                material_ids = request.form.getlist("bom_material_id[]")
+                quantities = request.form.getlist("bom_material_qty[]")
+                for idx, material_id in enumerate(material_ids):
+                    qty = float(quantities[idx] or 0) if idx < len(quantities) else 0
+                    if qty > 0 and query("SELECT id FROM raw_materials WHERE id=?", (material_id,), one=True):
+                        execute("INSERT INTO manufacturing_bom_items (bom_id,raw_material_id,qty) VALUES (?,?,?)", (bom_id, material_id, qty))
+                flash("تم حفظ قائمة المواد", "ok")
+            elif action == "open_order":
+                product_id = int(request.form.get("product_id") or 0)
+                product = query("SELECT * FROM products WHERE id=?", (product_id,), one=True)
+                if not product:
+                    raise ValueError("اختر المنتج النهائي")
+                planned = float(request.form.get("planned_qty") or 0)
+                if planned <= 0:
+                    raise ValueError("الكمية المخططة يجب أن تكون أكبر من صفر")
+                bom = query("SELECT * FROM manufacturing_boms WHERE product_id=? AND status='فعال' ORDER BY id DESC LIMIT 1", (product_id,), one=True)
+                number = next_number("MO", "production_orders")
+                order_id = execute(
+                    """INSERT INTO production_orders
+                       (number,product_id,planned_qty,status,current_stage,opened_at,labor_cost,overhead_cost,warehouse_id,notes,created_by)
+                       VALUES (?,?,?,'مفتوح','تجهيز',?,?,?,?,?,?)""",
+                    (number, product_id, planned, manufacturing_now(),
+                     float(request.form.get("labor_cost") or (bom["labor_cost"] if bom else 0)),
+                     float(request.form.get("overhead_cost") or (bom["overhead_cost"] if bom else 0)),
+                     request.form.get("warehouse_id") or None, request.form.get("order_notes"), session.get("user")),
+                )
+                for sequence, stage in enumerate(("تجهيز", "تصنيع", "فحص"), 1):
+                    execute("INSERT INTO production_stages (order_id,name,sequence,status) VALUES (?,?,?,'معلق')", (order_id, stage, sequence))
+                flash(f"تم فتح أمر التصنيع {number}", "ok")
+            else:
+                raise ValueError("إجراء تصنيع غير معروف")
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            flash(str(exc) if isinstance(exc, ValueError) else "تعذر حفظ البيانات (قد يكون الكود أو الإصدار مكرراً)", "err")
+        return redirect(url_for("manufacturing", order_id=request.form.get("order_id") or None))
+    materials = query("SELECT * FROM raw_materials ORDER BY name")
+    products = query("SELECT id,sku,name,unit,cost,qty FROM products WHERE item_type IS NULL OR item_type!='خدمة' ORDER BY name")
+    boms = query("""SELECT b.*, p.name product_name, p.sku FROM manufacturing_boms b JOIN products p ON p.id=b.product_id ORDER BY b.id DESC""")
+    orders = query("""SELECT o.*, p.name product_name, p.sku FROM production_orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC""")
+    selected_id = request.args.get("order_id", type=int) or (orders[0]["id"] if orders else None)
+    selected = query("SELECT o.*, p.name product_name, p.sku FROM production_orders o JOIN products p ON p.id=o.product_id WHERE o.id=?", (selected_id,), one=True) if selected_id else None
+    stages = query("SELECT * FROM production_stages WHERE order_id=? ORDER BY sequence", (selected_id,)) if selected_id else []
+    moves = query("""SELECT m.*, r.name material_name, r.code FROM raw_material_moves m JOIN raw_materials r ON r.id=m.raw_material_id
+                    WHERE m.reference_type='production_order' AND m.reference_id=? ORDER BY m.id DESC""", (selected_id,)) if selected_id else []
+    cost = manufacturing_order_cost(selected_id) if selected_id else {"material": 0, "labor": 0, "overhead": 0, "waste": 0}
+    warehouses = query("SELECT id,name FROM warehouses ORDER BY id")
+    return render_template("manufacturing.html", materials=materials, products=products, boms=boms, orders=orders,
+                           selected=selected, stages=stages, moves=moves, cost=cost, warehouses=warehouses)
+
+
+@app.route("/manufacturing/material/<int:material_id>/delete", methods=["POST"])
+@login_required
+def manufacturing_material_delete(material_id):
+    if query("SELECT 1 FROM manufacturing_bom_items WHERE raw_material_id=?", (material_id,), one=True):
+        flash("لا يمكن حذف مادة مستخدمة في قائمة مواد", "err")
+    else:
+        execute("DELETE FROM raw_materials WHERE id=?", (material_id,))
+        flash("تم حذف المادة الخام", "ok")
+    return redirect(url_for("manufacturing"))
+
+
+@app.route("/manufacturing/order/<int:order_id>/start", methods=["POST"])
+@login_required
+def manufacturing_start(order_id):
+    order = query("SELECT * FROM production_orders WHERE id=?", (order_id,), one=True)
+    if not order or order["status"] in ("مكتمل", "ملغي"):
+        flash("أمر التصنيع غير صالح للبدء", "err")
+    else:
+        stamp = manufacturing_now()
+        execute("UPDATE production_orders SET status='قيد التشغيل', started_at=?, current_stage='تجهيز' WHERE id=?", (stamp, order_id))
+        execute("UPDATE production_stages SET status='قيد التشغيل', started_at=? WHERE order_id=? AND sequence=1", (stamp, order_id))
+        flash("تم بدء أمر التصنيع", "ok")
+    return redirect(url_for("manufacturing", order_id=order_id))
+
+
+@app.route("/manufacturing/order/<int:order_id>/issue", methods=["POST"])
+@login_required
+def manufacturing_issue(order_id):
+    order = query("SELECT * FROM production_orders WHERE id=?", (order_id,), one=True)
+    try:
+        if not order or order["status"] not in ("قيد التشغيل", "مفتوح"):
+            raise ValueError("ابدأ أمر التصنيع أولاً")
+        bom = query("SELECT * FROM manufacturing_boms WHERE product_id=? AND status='فعال' ORDER BY id DESC LIMIT 1", (order["product_id"],), one=True)
+        if not bom:
+            raise ValueError("لا توجد قائمة مواد فعالة لهذا المنتج")
+        if query("SELECT 1 FROM raw_material_moves WHERE reference_type='production_order' AND reference_id=? AND move_type='صرف'", (order_id,), one=True):
+            raise ValueError("تم صرف مواد هذا الأمر مسبقاً")
+        items = query("SELECT * FROM manufacturing_bom_items WHERE bom_id=?", (bom["id"],))
+        if not items:
+            raise ValueError("قائمة المواد فارغة")
+        stamp = manufacturing_now()
+        for item in items:
+            material = query("SELECT * FROM raw_materials WHERE id=?", (item["raw_material_id"],), one=True)
+            required = float(item["qty"]) * float(order["planned_qty"])
+            if not material or float(material["qty"]) < required:
+                raise ValueError(f"كمية المادة غير كافية: {material['name'] if material else item['raw_material_id']}")
+        for item in items:
+            material = query("SELECT * FROM raw_materials WHERE id=?", (item["raw_material_id"],), one=True)
+            required = float(item["qty"]) * float(order["planned_qty"])
+            execute("UPDATE raw_materials SET qty=qty-? WHERE id=?", (required, material["id"]))
+            execute("""INSERT INTO raw_material_moves (raw_material_id,qty,move_type,reference_type,reference_id,unit_cost,date,created_by)
+                       VALUES (?,?, 'صرف','production_order',?,?,?,?)""", (material["id"], -required, order_id, material["cost"], stamp, session.get("user")))
+        flash("تم صرف مواد التصنيع حسب قائمة المواد", "ok")
+    except ValueError as exc:
+        flash(str(exc), "err")
+    return redirect(url_for("manufacturing", order_id=order_id))
+
+
+@app.route("/manufacturing/order/<int:order_id>/waste", methods=["POST"])
+@login_required
+def manufacturing_waste(order_id):
+    try:
+        order = query("SELECT * FROM production_orders WHERE id=?", (order_id,), one=True)
+        material_id = int(request.form.get("raw_material_id") or 0)
+        qty = float(request.form.get("qty") or 0)
+        material = query("SELECT * FROM raw_materials WHERE id=?", (material_id,), one=True)
+        if not order or order["status"] not in ("قيد التشغيل", "مفتوح"):
+            raise ValueError("الأمر غير متاح لتسجيل الهالك")
+        if not material or qty <= 0 or float(material["qty"]) < qty:
+            raise ValueError("تحقق من المادة وكمية الهالك")
+        stamp = manufacturing_now()
+        execute("UPDATE raw_materials SET qty=qty-? WHERE id=?", (qty, material_id))
+        execute("""INSERT INTO raw_material_moves (raw_material_id,qty,move_type,reference_type,reference_id,unit_cost,date,created_by)
+                   VALUES (?,?, 'هالك','production_order',?,?,?,?)""", (material_id, -qty, order_id, material["cost"], stamp, session.get("user")))
+        execute("UPDATE production_orders SET waste_cost=waste_cost+? WHERE id=?", (qty * float(material["cost"]), order_id))
+        flash("تم تسجيل الهالك وخصمه من المادة الخام", "ok")
+    except ValueError as exc:
+        flash(str(exc), "err")
+    return redirect(url_for("manufacturing", order_id=order_id))
+
+
+@app.route("/manufacturing/order/<int:order_id>/finish", methods=["POST"])
+@login_required
+def manufacturing_finish(order_id):
+    try:
+        order = query("SELECT * FROM production_orders WHERE id=?", (order_id,), one=True)
+        completed_qty = float(request.form.get("completed_qty") or (order["planned_qty"] if order else 0))
+        if not order or order["status"] == "مكتمل" or completed_qty <= 0:
+            raise ValueError("أمر التصنيع أو الكمية غير صالح")
+        costs = manufacturing_order_cost(order_id)
+        total = costs["material"] + costs["labor"] + costs["overhead"] + costs["waste"]
+        unit_cost = total / completed_qty if completed_qty else 0
+        apply_stock(order["product_id"], completed_qty, unit_cost, "إنتاج", order["number"], "إضافة منتج تام")
+        execute("UPDATE products SET cost=? WHERE id=?", (round(unit_cost, 4), order["product_id"]))
+        stamp = manufacturing_now()
+        execute("UPDATE production_orders SET completed_qty=?, status='مكتمل', completed_at=?, current_stage='فحص' WHERE id=?", (completed_qty, stamp, order_id))
+        execute("UPDATE production_stages SET status='مكتمل', ended_at=? WHERE order_id=?", (stamp, order_id))
+        flash(f"تم إنهاء الأمر. تكلفة الوحدة: {money(unit_cost)}", "ok")
+    except ValueError as exc:
+        flash(str(exc), "err")
+    return redirect(url_for("manufacturing", order_id=order_id))
 
 
 @app.route("/manifest.webmanifest")

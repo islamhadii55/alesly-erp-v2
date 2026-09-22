@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta name="theme-color" content="#14273d">
   <title>{{ title or APP_NAME }}</title>
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
@@ -11,6 +12,31 @@
   <link rel="manifest" href="{{ url_for('web_manifest') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script>window.ALASLY_SYNC = {{ sync_cfg|tojson }}; window.ALASLY_PLATFORM = window.ALASLY_PLATFORM || "web";</script>
+
+  <script>
+    (function () {
+      var token = document.querySelector('meta[name="csrf-token"]').content;
+      document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function (form) {
+          if (!form.querySelector('input[name="csrf_token"]')) {
+            var input = document.createElement("input");
+            input.type = "hidden"; input.name = "csrf_token"; input.value = token;
+            form.appendChild(input);
+          }
+        });
+      });
+      var originalFetch = window.fetch;
+      window.fetch = function (input, init) {
+        init = init || {};
+        var method = (init.method || (input && input.method) || "GET").toUpperCase();
+        if (["POST", "PUT", "PATCH", "DELETE"].indexOf(method) !== -1) {
+          init.headers = new Headers(init.headers || {});
+          init.headers.set("X-CSRFToken", token);
+        }
+        return originalFetch(input, init);
+      };
+    })();
+  </script>
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
   <div class="app">

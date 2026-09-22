@@ -14,25 +14,25 @@
 </head>
 <body class="classic-theme {% block bodyclass %}{% endblock %}">
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="main-sidebar" aria-label="القائمة الجانبية">
       <div class="brand">
         <img class="logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="الأصلي">
         <div><h1>الاصلي لقطع الغيار</h1><p>تجارة وصيانة السيارات</p></div>
       </div>
-      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="طي الشريط الجانبي" title="طي/فتح الشريط الجانبي">◀</button>
+      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="طي القائمة الجانبية" aria-expanded="true" aria-controls="main-sidebar" title="طي القائمة الجانبية"><span aria-hidden="true">◀</span></button>
       <nav class="nav quick-nav">
         <div class="quick-nav-title">اختصارات سريعة</div>
-        <a class="{{ nav_active('dashboard') }}" href="{{ url_for('dashboard') }}"><span>⌂</span> لوحة التحكم</a>
-        {% if can('pos') %}<a class="{{ nav_active('pos') }}" href="{{ url_for('pos') }}"><span>▣</span> كاشير سريع</a>{% endif %}
-        {% if can('sales') %}<a href="{{ url_for('invoice_new', kind='sale') }}"><span>＋</span> فاتورة بيع</a>{% endif %}
-        {% if can('purchases') %}<a href="{{ url_for('invoice_new', kind='purchase') }}"><span>⇩</span> فاتورة شراء</a>{% endif %}
-        {% if can('inventory') %}<a class="{{ nav_active('inventory') }}" href="{{ url_for('inventory') }}"><span>▦</span> كارت الصنف والمخزون</a><a href="{{ url_for('inventory_shortages') }}"><span>!</span> نواقص المخزون</a>{% endif %}
-        {% if can('manufacturing') %}<a class="{{ nav_active('manufacturing') }}" href="{{ url_for('manufacturing') }}"><span>⚙</span> التصنيع</a>{% endif %}
-        {% if can('reports') %}<a class="{{ nav_active('reports') }}" href="{{ url_for('reports') }}"><span>▥</span> التقارير</a>{% endif %}
-        {% if can('parties') %}<a href="{{ url_for('customers') }}"><span>♙</span> العملاء</a>{% endif %}
+        <a class="{{ nav_active('dashboard') }}" href="{{ url_for('dashboard') }}" title="لوحة التحكم"><span>⌂</span> لوحة التحكم</a>
+        {% if can('pos') %}<a class="{{ nav_active('pos') }}" href="{{ url_for('pos') }}" title="كاشير سريع"><span>▣</span> كاشير سريع</a>{% endif %}
+        {% if can('sales') %}<a href="{{ url_for('invoice_new', kind='sale') }}" title="فاتورة بيع"><span>＋</span> فاتورة بيع</a>{% endif %}
+        {% if can('purchases') %}<a href="{{ url_for('invoice_new', kind='purchase') }}" title="فاتورة شراء"><span>⇩</span> فاتورة شراء</a>{% endif %}
+        {% if can('inventory') %}<a class="{{ nav_active('inventory') }}" href="{{ url_for('inventory') }}" title="كارت الصنف والمخزون"><span>▦</span> كارت الصنف والمخزون</a><a href="{{ url_for('inventory_shortages') }}" title="نواقص المخزون"><span>!</span> نواقص المخزون</a>{% endif %}
+        {% if can('manufacturing') %}<a class="{{ nav_active('manufacturing') }}" href="{{ url_for('manufacturing') }}" title="التصنيع"><span>⚙</span> التصنيع</a>{% endif %}
+        {% if can('reports') %}<a class="{{ nav_active('reports') }}" href="{{ url_for('reports') }}" title="التقارير"><span>▥</span> التقارير</a>{% endif %}
+        {% if can('parties') %}<a href="{{ url_for('customers') }}" title="العملاء"><span>♙</span> العملاء</a>{% endif %}
         <div class="quick-nav-divider"></div>
-        {% if can('branches') %}<a href="{{ url_for('branches') }}"><span>⌘</span> الفروع</a>{% endif %}{% if role == 'مدير' %}<a href="{{ url_for('settings') }}"><span>⚙</span> الإعدادات</a>{% endif %}
-        <a href="{{ url_for('logout') }}"><span>↪</span> تسجيل الخروج</a>
+        {% if can('branches') %}<a href="{{ url_for('branches') }}" title="الفروع"><span>⌘</span> الفروع</a>{% endif %}{% if role == 'مدير' %}<a href="{{ url_for('settings') }}" title="الإعدادات"><span>⚙</span> الإعدادات</a>{% endif %}
+        <a href="{{ url_for('logout') }}" title="تسجيل الخروج"><span>↪</span> تسجيل الخروج</a>
       </nav>
       <div class="sidebar-footer"><b>نظام الأصلي ERP</b><small>إدارة أدق لقطع الغيار</small></div>
     </aside>
@@ -67,7 +67,8 @@
     </main>
   </div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script><script src="{{ url_for('static', filename='js/offline.js') }}"></script>
-  <script>(function(){var side=document.querySelector('.sidebar'),toggle=document.getElementById('sidebar-toggle');if(side&&toggle){var key='alasly-sidebar-collapsed',saved=localStorage.getItem(key);if(saved!=='0')side.classList.add('is-collapsed');function sync(){var c=side.classList.contains('is-collapsed');toggle.textContent=c?'▶':'◀';toggle.setAttribute('aria-label',c?'فتح الشريط الجانبي':'طي الشريط الجانبي');toggle.setAttribute('title',c?'فتح القائمة الجانبية':'طي القائمة الجانبية');}toggle.addEventListener('click',function(){side.classList.toggle('is-collapsed');localStorage.setItem(key,side.classList.contains('is-collapsed')?'1':'0');sync();});sync();}})();</script>
+  <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+  <script>(function(){var side=document.getElementById('main-sidebar'),toggle=document.getElementById('sidebar-toggle'),overlay=document.getElementById('sidebar-overlay');if(side&&toggle){var key='alasly-sidebar-collapsed';function isMobile(){return window.matchMedia('(max-width: 700px)').matches;}function sync(){var c=side.classList.contains('is-collapsed'),mobile=side.classList.contains('is-mobile-open');toggle.querySelector('span').textContent=c?'▶':'◀';toggle.setAttribute('aria-expanded',String(!c));toggle.setAttribute('aria-label',c?'فتح القائمة الجانبية':'طي القائمة الجانبية');toggle.setAttribute('title',c?'فتح القائمة الجانبية':'طي القائمة الجانبية');if(overlay)overlay.classList.toggle('is-visible',mobile);if(overlay)overlay.setAttribute('aria-hidden',String(!mobile));}function setCollapsed(value){side.classList.toggle('is-collapsed',value);localStorage.setItem(key,value?'1':'0');sync();}var saved=localStorage.getItem(key);if(isMobile()){side.classList.add('is-collapsed');}else if(saved==='1'){side.classList.add('is-collapsed');}function closeMobile(){if(isMobile()){side.classList.remove('is-mobile-open');sync();}}toggle.addEventListener('click',function(){if(isMobile()){side.classList.toggle('is-mobile-open');side.classList.remove('is-collapsed');}else{setCollapsed(!side.classList.contains('is-collapsed'));}});if(overlay)overlay.addEventListener('click',closeMobile);side.querySelectorAll('a').forEach(function(a){a.addEventListener('click',closeMobile);});document.addEventListener('keydown',function(e){if((e.key==='b'||e.key==='B')&&(e.ctrlKey||e.metaKey)){e.preventDefault();if(!isMobile())setCollapsed(!side.classList.contains('is-collapsed'));}if(e.key==='Escape')closeMobile();});window.addEventListener('resize',sync);sync();}})();</script>
   <script>(function(){var node=document.getElementById("win-clock");if(!node)return;function tick(){var d=new Date();node.textContent=d.toLocaleDateString("ar-EG")+" — "+d.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true});}tick();setInterval(tick,1000);})();</script>
   {% block scripts %}{% endblock %}
 </body>

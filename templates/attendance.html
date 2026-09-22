@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set title = "الحضور والغياب والتأخير" %}
+{% block content %}
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>تسجيل غياب</h3></div>
+  <div class="panel-b">
+    <form method="post" class="form-grid">
+      <div class="field"><label>الموظف</label><select name="employee_id" required>{% for e in emps %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>التاريخ</label><input type="date" name="attendance_date" value="{{ today }}" required></div>
+      <div class="field full"><label>ملاحظات</label><input name="notes" placeholder="سبب الغياب أو ملاحظة المدير"></div>
+      <div><button class="btn btn-gold">تسجيل الغياب</button></div>
+    </form>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-h"><h3>سجل الحضور — {{ period }}</h3><form method="get"><input type="month" name="period" value="{{ period }}"><button class="btn btn-ghost">عرض</button></form></div>
+  <div class="panel-b">
+    <table>
+      <tr><th>التاريخ</th><th>الموظف</th><th>الحالة</th><th>وقت البدء</th><th>وقت الانتهاء</th><th>التأخير بالدقائق</th><th>الملاحظة</th></tr>
+      {% for r in rows %}<tr>
+        <td>{{ r.attendance_date }}</td><td>{{ r.name }}</td>
+        <td><span class="badge {% if r.status=='حاضر' %}b-paid{% else %}b-void{% endif %}">{{ r.status }}</span></td>
+        <td>{{ r.started_at or '—' }}</td><td>{{ r.ended_at or '—' }}</td><td>{{ r.late_minutes }}</td><td>{{ r.notes or '' }}</td>
+      </tr>{% else %}<tr><td colspan="7">لا توجد سجلات لهذا الشهر.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

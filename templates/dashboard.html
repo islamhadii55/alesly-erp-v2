@@ -6,6 +6,9 @@
   <a class="dash-btn dash-btn-primary" href="{{ url_for('pos') }}">كاشير</a>
   <a class="dash-btn dash-btn-ghost" href="{{ url_for('job_new') }}">أمر شغل</a>
   <a class="dash-btn dash-btn-ghost" href="{{ url_for('invoice_new', kind='purchase') }}">فاتورة شراء</a>
+  {% if can('shift_start') and not open_shift %}<form method="post" action="{{ url_for('shift_open') }}" style="display:inline"><input type="hidden" name="opening_cash" value="0"><button class="dash-btn dash-btn-primary" type="submit">بدء الوردية</button></form>{% endif %}
+  {% if can('shift_end') and open_shift %}<form method="post" action="{{ url_for('shift_close') }}" style="display:inline" onsubmit="var v=prompt('أدخل النقد الفعلي في الدرج','0'); if(v===null)return false; this.actual_cash.value=v||0; return confirm('إنهاء ورديتك الآن؟')"><input type="hidden" name="actual_cash" value="0"><button class="dash-btn dash-btn-ghost" type="submit">إنهاء الوردية</button></form>{% endif %}
+  {% if can('attendance') %}<a class="dash-btn dash-btn-ghost" href="{{ url_for('attendance') }}">الحضور</a>{% endif %}
 </span>
 {% endblock %}
 {% block content %}

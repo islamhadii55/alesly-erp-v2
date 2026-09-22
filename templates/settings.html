@@ -124,6 +124,8 @@
         <div class="field" style="margin-bottom:10px"><label>نسبة الضريبة %</label><input name="vat_rate" value="{{ settings.get('vat_rate','15') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>نقاط الولاء لكل 100</label><input name="points_per_100" value="{{ settings.get('points_per_100','1') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>سعر ساعة المصنعية الافتراضي</label><input name="default_labor_rate" value="{{ settings.get('default_labor_rate','80') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>بداية الدوام</label><input type="time" name="work_start_time" value="{{ settings.get('work_start_time','09:00') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>سماح التأخير بالدقائق</label><input type="number" min="0" name="attendance_grace_minutes" value="{{ settings.get('attendance_grace_minutes','15') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>تذييل الفاتورة</label><input name="print_footer" value="{{ settings.get('print_footer','') }}"></div>
         <label style="display:flex;gap:8px;align-items:center;margin:8px 0">
           <input type="checkbox" name="show_cost" {% if settings.get('show_cost')=='1' %}checked{% endif %}> إظهار التكلفة في الطباعة

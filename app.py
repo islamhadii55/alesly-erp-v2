@@ -71,6 +71,10 @@ PERMISSION_MODULES = (
     ("reports", "التقارير", "المخزون والحسابات"),
     ("sync", "المزامنة بدون إنترنت", "المخزون والحسابات"),
     ("hr", "الموارد البشرية", "الموارد البشرية"),
+    ("attendance", "الحضور والغياب والتأخير", "الموارد البشرية"),
+    ("shift_start", "بدء الوردية", "الموارد البشرية"),
+    ("shift_end", "إنهاء الوردية", "الموارد البشرية"),
+    ("attendance_review", "مراجعة خصومات الحضور", "الموارد البشرية"),
 )
 PERMISSION_KEYS = {key for key, _, _ in PERMISSION_MODULES}
 PERMISSION_LABELS = {key: label for key, label, _ in PERMISSION_MODULES}
@@ -79,8 +83,10 @@ PERMISSION_LABELS = {key: label for key, label, _ in PERMISSION_MODULES}
 ENDPOINT_PERMISSIONS = {
     "dashboard": "dashboard",
     "pos": "pos",
-    "shift_open": "treasury",
-    "shift_close": "treasury",
+    "shift_open": "shift_start",
+    "shift_close": "shift_end",
+    "attendance_mark": "attendance",
+    "attendance": "attendance",
     "invoices_list": "invoices",
     "invoice_new": "invoices",
     "invoice_view": "invoices",
@@ -154,7 +160,10 @@ def user_has_permission(module):
         return False
     if perms == "all":
         return True
-    return module in {p.strip() for p in str(perms).split(",") if p.strip()}
+    granted = {p.strip() for p in str(perms).split(",") if p.strip()}
+    if module in {"shift_start", "shift_end"} and "shift" in granted:
+        return True
+    return module in granted
 
 
 def resolve_endpoint_permission():
@@ -739,7 +748,22 @@ def init_db():
             username TEXT NOT NULL,
             started_at TEXT NOT NULL,
             ended_at TEXT,
-            opening_cash REAL NOT NULL DEFAULT 0
+            opening_cash REAL NOT NULL DEFAULT 0,
+            employee_id INTEGER REFERENCES employees(id)
+        );
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL REFERENCES employees(id),
+            attendance_date TEXT NOT NULL,
+            shift_id INTEGER REFERENCES shifts(id),
+            status TEXT NOT NULL DEFAULT 'حاضر',
+            started_at TEXT,
+            ended_at TEXT,
+            late_minutes INTEGER NOT NULL DEFAULT 0,
+            deduction REAL NOT NULL DEFAULT 0,
+            reviewed INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            UNIQUE(employee_id, attendance_date)
         );
         CREATE TABLE IF NOT EXISTS cash_accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -927,6 +951,8 @@ def init_db():
         "vat_rate": "15",
         "points_per_100": "1",
         "default_labor_rate": "80",
+        "work_start_time": "09:00",
+        "attendance_grace_minutes": "15",
         "sync_enabled": "1",
         "sync_server_url": "",
         "sync_token": "alasly-sync-local",
@@ -993,6 +1019,16 @@ def init_db():
         (
             ("job_title", "TEXT"),
             ("permissions", "TEXT NOT NULL DEFAULT 'sales,shift'"),
+        ),
+    )
+    ensure_columns("employees", (("username", "TEXT"),))
+    ensure_columns("shifts", (("employee_id", "INTEGER"),))
+    ensure_columns(
+        "salaries",
+        (
+            ("attendance_deduct", "REAL NOT NULL DEFAULT 0"),
+            ("absence_days", "REAL NOT NULL DEFAULT 0"),
+            ("late_minutes", "INTEGER NOT NULL DEFAULT 0"),
         ),
     )
     ensure_columns(
@@ -1595,6 +1631,28 @@ def current_shift(username=None):
         (username,),
         one=True,
     )
+
+
+def current_employee(username=None):
+    username = username or session.get("user")
+    if not username:
+        return None
+    return query("SELECT * FROM employees WHERE username=? AND status='نشط'", (username,), one=True)
+
+
+def attendance_preview(employee_id, period):
+    emp = query("SELECT salary FROM employees WHERE id=?", (employee_id,), one=True)
+    if not emp:
+        return {"deduct": 0.0, "absence_days": 0, "late_minutes": 0, "rows": []}
+    daily = float(emp["salary"] or 0) / 30.0
+    rows = query(
+        "SELECT * FROM attendance WHERE employee_id=? AND attendance_date LIKE ? ORDER BY attendance_date",
+        (employee_id, period + "%"),
+    )
+    absence_days = sum(1 for r in rows if r["status"] == "غائب")
+    late_minutes = sum(int(r["late_minutes"] or 0) for r in rows)
+    deduct = round(absence_days * daily + (late_minutes / 480.0) * daily, 2)
+    return {"deduct": deduct, "absence_days": absence_days, "late_minutes": late_minutes, "rows": rows}
 
 
 def add_journal(description, account_name, debit=0, credit=0, reference_type=None, reference_id=None):
@@ -3088,6 +3146,8 @@ def settings():
                 "vat_rate",
                 "points_per_100",
                 "default_labor_rate",
+                "work_start_time",
+                "attendance_grace_minutes",
                 "sync_server_url",
                 "sync_token",
                 "device_name",
@@ -3175,18 +3235,19 @@ def employees():
             float(request.form.get("salary") or 0),
             request.form.get("status") or "نشط",
             request.form.get("notes"),
+            (request.form.get("username") or "").strip() or None,
         )
         if eid:
             execute(
-                """UPDATE employees SET name=?, job_title=?, phone=?, hire_date=?, salary=?, status=?, notes=?
+                """UPDATE employees SET name=?, job_title=?, phone=?, hire_date=?, salary=?, status=?, notes=?, username=?
                    WHERE id=?""",
                 data + (eid,),
             )
             flash("تم تحديث الموظف", "ok")
         else:
             execute(
-                """INSERT INTO employees (name, job_title, phone, hire_date, salary, status, notes)
-                   VALUES (?,?,?,?,?,?,?)""",
+                """INSERT INTO employees (name, job_title, phone, hire_date, salary, status, notes, username)
+                   VALUES (?,?,?,?,?,?,?,?)""",
                 data,
             )
             flash("تم إضافة الموظف", "ok")
@@ -3233,6 +3294,26 @@ def advances():
     return render_template("advances.html", rows=rows, emps=emps, total_open=total_open)
 
 
+@app.route("/attendance", methods=["GET", "POST"])
+@login_required
+def attendance():
+    if request.method == "POST":
+        employee_id = int(request.form["employee_id"])
+        day = request.form.get("attendance_date") or date.today().isoformat()
+        existing = query("SELECT id FROM attendance WHERE employee_id=? AND attendance_date=?", (employee_id, day), one=True)
+        if existing:
+            execute("UPDATE attendance SET status='غائب', notes=? WHERE id=?", (request.form.get("notes"), existing["id"]))
+        else:
+            execute("INSERT INTO attendance (employee_id, attendance_date, status, notes) VALUES (?,?,?,?)", (employee_id, day, "غائب", request.form.get("notes")))
+        flash("تم تسجيل الغياب، وسيظهر الخصم للمراجعة في كشف الراتب", "ok")
+        return redirect(url_for("attendance"))
+    period = request.args.get("period") or date.today().strftime("%Y-%m")
+    rows = query("""SELECT a.*, e.name, e.salary FROM attendance a JOIN employees e ON e.id=a.employee_id
+                    WHERE a.attendance_date LIKE ? ORDER BY a.attendance_date DESC, e.name""", (period + "%",))
+    emps = query("SELECT * FROM employees WHERE status='نشط' ORDER BY name")
+    return render_template("attendance.html", rows=rows, emps=emps, period=period)
+
+
 @app.route("/salaries", methods=["GET", "POST"])
 @login_required
 def salaries():
@@ -3240,16 +3321,18 @@ def salaries():
         emp = query("SELECT * FROM employees WHERE id=?", (request.form["employee_id"],), one=True)
         period = request.form["period"]
         bonus = float(request.form.get("bonus") or 0)
+        preview = attendance_preview(emp["id"], period)
+        attendance_deduct = preview["deduct"] if request.form.get("attendance_approve") == "1" else 0.0
         open_adv = query(
             "SELECT COALESCE(SUM(remaining),0) v FROM advances WHERE employee_id=?",
             (emp["id"],),
             one=True,
         )["v"]
         deduct = min(float(request.form.get("advance_deduct") or open_adv), open_adv)
-        net = float(emp["salary"]) + bonus - deduct
+        net = float(emp["salary"]) + bonus - deduct - attendance_deduct
         execute(
-            """INSERT INTO salaries (employee_id, period, base_salary, bonus, advance_deduct, net, status, paid_at, notes)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO salaries (employee_id, period, base_salary, bonus, advance_deduct, net, status, paid_at, notes, attendance_deduct, absence_days, late_minutes)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 emp["id"],
                 period,
@@ -3260,6 +3343,9 @@ def salaries():
                 "مدفوع",
                 date.today().isoformat(),
                 request.form.get("notes"),
+                attendance_deduct,
+                preview["absence_days"] if attendance_deduct else 0,
+                preview["late_minutes"] if attendance_deduct else 0,
             ),
         )
         remain = deduct
@@ -3281,8 +3367,9 @@ def salaries():
            JOIN employees e ON e.id=s.employee_id ORDER BY s.id DESC"""
     )
     emps = query("SELECT * FROM employees WHERE status='نشط' ORDER BY name")
+    previews = {str(e["id"]): attendance_preview(e["id"], datetime.now().strftime("%Y-%m")) for e in emps}
     total = query("SELECT COALESCE(SUM(net),0) v FROM salaries", one=True)["v"]
-    return render_template("salaries.html", rows=rows, emps=emps, total=total)
+    return render_template("salaries.html", rows=rows, emps=emps, previews=previews, total=total)
 
 
 @app.route("/costs")
@@ -3721,10 +3808,37 @@ def shift_open():
     if current_shift():
         flash("لديك وردية مفتوحة", "err")
         return redirect(request.referrer or url_for("pos"))
-    execute(
-        "INSERT INTO shifts (username, started_at, opening_cash) VALUES (?,?,?)",
-        (session.get("user"), datetime.now().strftime("%Y-%m-%d %H:%M"), float(request.form.get("opening_cash") or 0)),
+    employee = current_employee()
+    if not employee:
+        flash("اربط حساب المستخدم بموظف نشط أولاً من شاشة الموظفين", "err")
+        return redirect(request.referrer or url_for("dashboard"))
+    started = datetime.now()
+    today = started.date().isoformat()
+    start_time = datetime.strptime(get_setting("work_start_time", "09:00"), "%H:%M").replace(
+        year=started.year, month=started.month, day=started.day
     )
+    grace = int(get_setting("attendance_grace_minutes", "15") or 15)
+    late_minutes = max(0, int((started - start_time).total_seconds() // 60) - grace)
+    attendance = query(
+        "SELECT id FROM attendance WHERE employee_id=? AND attendance_date=?",
+        (employee["id"], today), one=True,
+    )
+    execute(
+        "INSERT INTO shifts (username, started_at, opening_cash, employee_id) VALUES (?,?,?,?)",
+        (session.get("user"), started.strftime("%Y-%m-%d %H:%M"), float(request.form.get("opening_cash") or 0), employee["id"]),
+    )
+    shift_id = db().execute("SELECT last_insert_rowid()").fetchone()[0]
+    if attendance:
+        execute(
+            "UPDATE attendance SET shift_id=?, status='حاضر', started_at=?, late_minutes=?, notes=NULL WHERE id=?",
+            (shift_id, started.strftime("%Y-%m-%d %H:%M"), late_minutes, attendance["id"]),
+        )
+    else:
+        execute(
+            """INSERT INTO attendance (employee_id, attendance_date, shift_id, status, started_at, late_minutes)
+               VALUES (?,?,?,?,?,?)""",
+            (employee["id"], today, shift_id, "حاضر", started.strftime("%Y-%m-%d %H:%M"), late_minutes),
+        )
     flash("تم فتح الوردية", "ok")
     return redirect(request.referrer or url_for("pos"))
 
@@ -3745,7 +3859,9 @@ def shift_close():
         one=True,
     )["v"]
     expected = float(expected) + float(sh["opening_cash"] or 0)
-    execute("UPDATE shifts SET ended_at=? WHERE id=?", (datetime.now().strftime("%Y-%m-%d %H:%M"), sh["id"]))
+    ended = datetime.now().strftime("%Y-%m-%d %H:%M")
+    execute("UPDATE shifts SET ended_at=? WHERE id=?", (ended, sh["id"]))
+    execute("UPDATE attendance SET ended_at=? WHERE shift_id=?", (ended, sh["id"]))
     execute(
         """INSERT INTO daily_closures (shift_id, closing_date, expected_cash, actual_cash, difference, closed_by, closed_at, notes)
            VALUES (?,?,?,?,?,?,?,?)""",

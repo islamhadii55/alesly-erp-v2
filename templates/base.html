@@ -50,7 +50,7 @@
         <details><summary>الحسابات والتقارير</summary><div class="menu-dropdown">
           {% if can('accounts') %}<a href="{{ url_for('accounts') }}">حسابات العملاء والموردين</a>{% endif %}{% if can('treasury') %}<a href="{{ url_for('treasury') }}">الخزينة والوردية</a>{% endif %}{% if can('finance') %}<a href="{{ url_for('finance') }}">شيكات وأقساط</a>{% endif %}{% if can('pnl') %}<a href="{{ url_for('pnl') }}">الأرباح والخسائر</a>{% endif %}{% if can('reports') %}<a href="{{ url_for('reports') }}">التقارير والتحليلات</a>{% endif %}
         </div></details>
-        {% if can('hr') %}<details><summary>الموارد البشرية</summary><div class="menu-dropdown"><a href="{{ url_for('employees') }}">الموظفون</a><a href="{{ url_for('advances') }}">السلف</a><a href="{{ url_for('salaries') }}">الرواتب</a></div></details>{% endif %}
+        {% if can('hr') %}<details><summary>الموارد البشرية</summary><div class="menu-dropdown"><a href="{{ url_for('employees') }}">الموظفون</a>{% if can('attendance') %}<a href="{{ url_for('attendance') }}">الحضور والغياب</a>{% endif %}<a href="{{ url_for('advances') }}">السلف</a><a href="{{ url_for('salaries') }}">الرواتب</a></div></details>{% endif %}
         <a class="menu-search-link" href="{{ url_for('inventory') }}">بحث عن قطعة</a>
       </nav>
       <div class="toolbar-green">

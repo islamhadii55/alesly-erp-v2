@@ -41,6 +41,7 @@
           <td class="actions">
           <a class="btn btn-ghost" href="{{ url_for('invoice_view', inv_id=r.id) }}">عرض</a>
           <a class="btn btn-navy" href="{{ url_for('invoice_print', inv_id=r.id) }}">طباعة</a>
+          <a class="btn btn-gold" href="{{ url_for('invoice_pdf', inv_id=r.id) }}">PDF</a>
           {% if r.status != 'ملغاة' and kind=='sale' %}
           <a class="btn btn-ok" href="{{ url_for('invoice_new', kind='sale_return') }}?from={{ r.id }}">مرتجع</a>
           {% elif r.status != 'ملغاة' and kind=='purchase' %}

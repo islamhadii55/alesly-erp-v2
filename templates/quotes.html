@@ -60,6 +60,7 @@
         <td class="money">{{ r.total|money }}</td>
         <td><span class="badge {% if r.invoice_id or r.status == 'محوّل' %}b-paid{% else %}b-open{% endif %}">{{ 'منفذ' if r.invoice_id or r.status == 'محوّل' else 'غير منفذ' }}</span></td>
         <td>
+          <a class="btn btn-navy" href="{{ url_for('quote_pdf', qid=r.id) }}">PDF</a>
           {% if not r.invoice_id %}
           <form method="post" action="{{ url_for('quote_to_invoice', qid=r.id) }}" style="margin:0">
             <select name="payment_method">{% for m in pay_methods %}<option>{{ m }}</option>{% endfor %}</select>

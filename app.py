@@ -3484,6 +3484,101 @@ def invoice_print(inv_id):
     )
 
 
+def pdf_table_style():
+    return TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2f6fb5")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b8c6d4")),
+        ("FONTNAME", (0, 0), (-1, -1), "DejaVu"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f7fb")]),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+    ])
+
+
+def invoice_pdf_response(inv, items, filename_prefix="فاتورة"):
+    if not REPORTLAB_OK:
+        flash("تصدير PDF غير متاح حاليًا على الخادم", "err")
+        return redirect(url_for("invoice_view", inv_id=inv["id"]))
+    stream = io.BytesIO()
+    doc = SimpleDocTemplate(stream, pagesize=landscape(A4), rightMargin=28, leftMargin=28, topMargin=28, bottomMargin=28)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="Arabic", fontName="DejaVu", fontSize=9, leading=13, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name="ArabicTitle", fontName="DejaVu", fontSize=15, leading=20, alignment=TA_RIGHT, textColor=colors.HexColor("#173653")))
+    story = [
+        Paragraph(rtl_pdf(all_settings().get("shop_name", APP_NAME)), styles["ArabicTitle"]),
+        Paragraph(rtl_pdf(f"{KIND_LABELS.get(inv['kind'], inv['kind'])} — رقم {inv['number']}"), styles["Arabic"]),
+        Paragraph(rtl_pdf(f"التاريخ: {inv['date']}   |   الطرف: {inv['party_name'] or '-'}   |   الحالة: {inv['status']}"), styles["Arabic"]),
+        Spacer(1, 10),
+    ]
+    data = [[rtl_pdf(x) for x in ["الوصف", "الكمية", "سعر الوحدة", "إجمالي الصنف", "التكلفة", "الربح"]]]
+    for item in items:
+        data.append([
+            Paragraph(rtl_pdf(item["description"]), styles["Arabic"]),
+            str(item["qty"]), money(item["unit_price"]), money(item["line_total"]),
+            money(item["line_cost"]), money(item["line_profit"]),
+        ])
+    story.append(Table(data, repeatRows=1, colWidths=[260, 65, 85, 95, 85, 85], style=pdf_table_style()))
+    story.extend([
+        Spacer(1, 10),
+        Paragraph(rtl_pdf(f"المجموع: {money(inv['subtotal'])}   |   الخصم: {money(inv['discount'])}   |   الضريبة: {money(inv['tax'])}   |   الصافي: {money(inv['total'])}"), styles["Arabic"]),
+        Paragraph(rtl_pdf(f"المدفوع: {money(inv['paid'])}   |   المتبقي: {money(float(inv['total']) - float(inv['paid']))}"), styles["Arabic"]),
+    ])
+    doc.build(story)
+    stream.seek(0)
+    return send_file(stream, as_attachment=True, download_name=f"{filename_prefix}-{inv['number']}.pdf", mimetype="application/pdf")
+
+
+@app.route("/invoice/<int:inv_id>/pdf")
+@login_required
+def invoice_pdf(inv_id):
+    inv = query("SELECT * FROM invoices WHERE id=?", (inv_id,), one=True)
+    if not inv:
+        flash("المستند غير موجود", "err")
+        return redirect(url_for("dashboard"))
+    items = query("SELECT * FROM invoice_items WHERE invoice_id=?", (inv_id,))
+    return invoice_pdf_response(inv, items)
+
+
+@app.route("/quotes/<int:qid>/pdf")
+@login_required
+def quote_pdf(qid):
+    quote = query("SELECT * FROM quotes WHERE id=?", (qid,), one=True)
+    items = query("SELECT * FROM quote_items WHERE quote_id=?", (qid,))
+    if not quote:
+        flash("عرض السعر غير موجود", "err")
+        return redirect(url_for("quotes"))
+    if not REPORTLAB_OK:
+        flash("تصدير PDF غير متاح حاليًا على الخادم", "err")
+        return redirect(url_for("quotes"))
+    stream = io.BytesIO()
+    doc = SimpleDocTemplate(stream, pagesize=landscape(A4), rightMargin=28, leftMargin=28, topMargin=28, bottomMargin=28)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="QuoteArabic", fontName="DejaVu", fontSize=9, leading=13, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name="QuoteTitle", fontName="DejaVu", fontSize=15, leading=20, alignment=TA_RIGHT, textColor=colors.HexColor("#173653")))
+    story = [
+        Paragraph(rtl_pdf(all_settings().get("shop_name", APP_NAME)), styles["QuoteTitle"]),
+        Paragraph(rtl_pdf(f"عرض سعر — رقم {quote['number']}"), styles["QuoteArabic"]),
+        Paragraph(rtl_pdf(f"التاريخ: {quote['date']}   |   العميل: {quote['customer_name'] or '-'}   |   الحالة: {'منفذ' if quote['invoice_id'] else 'غير منفذ'}"), styles["QuoteArabic"]),
+        Spacer(1, 10),
+    ]
+    data = [[rtl_pdf(x) for x in ["الوصف", "الكمية", "سعر الوحدة", "الإجمالي"]]]
+    for item in items:
+        data.append([Paragraph(rtl_pdf(item["description"]), styles["QuoteArabic"]), str(item["qty"]), money(item["unit_price"]), money(item["line_total"])])
+    story.append(Table(data, repeatRows=1, colWidths=[330, 80, 100, 110], style=pdf_table_style()))
+    story.extend([
+        Spacer(1, 10),
+        Paragraph(rtl_pdf(f"المجموع: {money(quote['subtotal'])}   |   الخصم: {money(quote['discount'])}   |   الضريبة: {money(quote['tax'])}   |   الإجمالي: {money(quote['total'])}"), styles["QuoteArabic"]),
+        Paragraph(rtl_pdf(f"ملاحظات: {quote['notes'] or '-'}"), styles["QuoteArabic"]),
+    ])
+    doc.build(story)
+    stream.seek(0)
+    return send_file(stream, as_attachment=True, download_name=f"عرض-سعر-{quote['number']}.pdf", mimetype="application/pdf")
+
+
 @app.route("/invoice/<int:inv_id>/cancel", methods=["POST"])
 @login_required
 def invoice_cancel(inv_id):

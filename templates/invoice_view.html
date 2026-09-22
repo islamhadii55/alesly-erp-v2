@@ -2,6 +2,7 @@
 {% set title = KIND_LABELS.get(inv.kind, inv.kind) + ' ' + inv.number %}
 {% block actions %}
 <a class="btn btn-navy" href="{{ url_for('invoice_print', inv_id=inv.id) }}">طباعة</a>
+<a class="btn btn-gold" href="{{ url_for('invoice_pdf', inv_id=inv.id) }}">تصدير PDF</a>
 {% if inv.status != 'ملغاة' %}
 <form method="post" action="{{ url_for('invoice_cancel', inv_id=inv.id) }}" style="display:inline;margin:0">
   <button class="btn btn-danger" onclick="return confirm('إلغاء المستند وإرجاع المخزون والخزينة؟')">إلغاء المستند</button>

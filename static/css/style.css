@@ -740,18 +740,14 @@ textarea { resize: vertical; }
   cursor: pointer; font-weight: 800; z-index: 2;
 }
 .sidebar-toggle:hover { background: #d4e5f2; }
-.classic-theme .sidebar.is-collapsed { width: 56px; padding: 8px 5px 14px; }
-.classic-theme .sidebar.is-collapsed .brand { justify-content: center; padding: 8px 4px; margin-top: 34px; }
-.classic-theme .sidebar.is-collapsed .brand .logo { width: 34px; height: 34px; }
+.classic-theme .sidebar.is-collapsed { width: 18px; padding: 0; overflow: visible; background: transparent; border-color: transparent; box-shadow: none; }
+.classic-theme .sidebar.is-collapsed .brand { display: none; }
+.classic-theme .sidebar.is-collapsed .brand .logo { display: none; }
 .classic-theme .sidebar.is-collapsed .brand > div,
 .classic-theme .sidebar.is-collapsed .quick-nav-title,
 .classic-theme .sidebar.is-collapsed .sidebar-footer { display: none; }
-.classic-theme .sidebar.is-collapsed .quick-nav a { justify-content: center; padding: 8px 4px; font-size: 0; position: relative; }
-.classic-theme .sidebar.is-collapsed .quick-nav a span { flex: 0 0 22px; font-size: 12px; text-align: center; }
-.classic-theme .sidebar.is-collapsed .quick-nav a::after { content: attr(title); position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); display: none; white-space: nowrap; padding: 4px 8px; border-radius: 3px; background: #14273d; color: #fff; font-size: 11px; z-index: 1100; }
-.classic-theme .sidebar.is-collapsed .quick-nav a:hover::after,
-.classic-theme .sidebar.is-collapsed .quick-nav a:focus-visible::after { display: block; }
-.classic-theme .sidebar.is-collapsed .sidebar-toggle { left: 50%; top: 8px; transform: translateX(-50%); width: 42px; height: 28px; border-radius: 4px; box-shadow: 0 1px 5px rgba(14,39,64,.2); }
+.classic-theme .sidebar.is-collapsed .quick-nav { display: none; }
+.classic-theme .sidebar.is-collapsed .sidebar-toggle { left: -5px; top: 18px; transform: none; width: 28px; height: 36px; padding: 0; border-radius: 5px 0 0 5px; box-shadow: -2px 2px 7px rgba(14,39,64,.2); }
 .sidebar-overlay { display: none; }
 @media (max-width: 700px) {
   .classic-theme .sidebar { right: 0; top: 0; bottom: 0; width: min(290px, 86vw); border-radius: 0; transform: translateX(105%); }

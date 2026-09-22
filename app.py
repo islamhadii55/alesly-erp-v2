@@ -126,6 +126,7 @@ ENDPOINT_PERMISSIONS = {
     "expenses": "expenses",
     "marketing": "marketing",
     "reports": "reports",
+    "shift_reports": "reports",
     "sync_center": "sync",
     "employees": "hr",
     "delete_employee": "hr",
@@ -1040,6 +1041,7 @@ def init_db():
             ("salesperson", "TEXT"),
             ("coupon_code", "TEXT"),
             ("cash_account_id", "INTEGER"),
+            ("shift_id", "INTEGER"),
         ),
     )
     ensure_columns("invoice_items", (("unit_name", "TEXT"),))
@@ -1306,12 +1308,13 @@ def save_invoice(kind, form, related_id=None):
     labor_total = float(form.get("labor_total") or 0)
     salesperson = form.get("salesperson") or session.get("user")
     cash_acc = cash_account_for(payment_method)
+    active_shift = current_shift()
     inv_id = execute(
         """INSERT INTO invoices
            (number, kind, party_type, party_id, party_name, date, status, subtotal, discount, tax,
             total, paid, cost_total, profit, vehicle, related_id, notes, created_by, payment_method, labor_total,
-            due_date, salesperson, coupon_code, cash_account_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            due_date, salesperson, coupon_code, cash_account_id, shift_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             number,
             kind,
@@ -1337,6 +1340,7 @@ def save_invoice(kind, form, related_id=None):
             salesperson,
             coupon_code,
             cash_acc["id"] if cash_acc else None,
+            active_shift["id"] if active_shift else None,
         ),
     )
     for item in items:
@@ -1653,6 +1657,17 @@ def attendance_preview(employee_id, period):
     late_minutes = sum(int(r["late_minutes"] or 0) for r in rows)
     deduct = round(absence_days * daily + (late_minutes / 480.0) * daily, 2)
     return {"deduct": deduct, "absence_days": absence_days, "late_minutes": late_minutes, "rows": rows}
+
+
+def current_late_notice():
+    employee = current_employee()
+    if not employee:
+        return None
+    return query(
+        """SELECT * FROM attendance WHERE employee_id=? AND attendance_date=? AND late_minutes>0
+           ORDER BY id DESC LIMIT 1""",
+        (employee["id"], date.today().isoformat()), one=True,
+    )
 
 
 def add_journal(description, account_name, debit=0, credit=0, reference_type=None, reference_id=None):
@@ -2180,6 +2195,7 @@ def inject():
         "kind": (request.view_args or {}).get("kind"),
         "print_settings": all_settings() if session.get("user") else {},
         "open_shift": current_shift() if session.get("user") else None,
+        "late_notice": current_late_notice() if session.get("user") else None,
         "sync_cfg": {
             "enabled": get_setting("sync_enabled", "1"),
             "server": get_setting("sync_server_url", ""),
@@ -3764,6 +3780,44 @@ def reports():
         top_profit=top_profit,
         customers=customers,
         suppliers=suppliers,
+    )
+
+
+@app.route("/reports/shifts")
+@login_required
+def shift_reports():
+    report_day = request.args.get("date") or date.today().isoformat()
+    shift_rows = query(
+        """SELECT s.*, COALESCE(e.name, s.username) employee_name, e.job_title,
+                  COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
+                  COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
+           FROM shifts s
+           LEFT JOIN employees e ON e.id=s.employee_id
+           LEFT JOIN invoices v ON v.shift_id=s.id AND v.kind IN ('sale','maintenance') AND v.status!='ملغاة'
+           WHERE substr(s.started_at,1,10)=?
+           GROUP BY s.id ORDER BY s.started_at DESC""",
+        (report_day,),
+    )
+    employee_totals = query(
+        """SELECT COALESCE(e.name, v.salesperson) employee_name, v.salesperson,
+                  COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
+                  COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
+           FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson
+           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?
+           GROUP BY v.salesperson, e.name ORDER BY sales_total DESC""",
+        (report_day + "%",),
+    )
+    invoices = query(
+        """SELECT v.number, v.date, v.kind, v.party_name, v.total, v.paid, v.profit,
+                  v.salesperson, COALESCE(e.name, v.salesperson) employee_name, v.shift_id
+           FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson
+           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?
+           ORDER BY v.id DESC""",
+        (report_day + "%",),
+    )
+    return render_template(
+        "shift_reports.html", report_day=report_day, shift_rows=shift_rows,
+        employee_totals=employee_totals, invoices=invoices,
     )
 
 

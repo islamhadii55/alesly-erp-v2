@@ -19,6 +19,7 @@
         <img class="logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="الأصلي">
         <div><h1>الاصلي لقطع الغيار</h1><p>تجارة وصيانة السيارات</p></div>
       </div>
+      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="طي الشريط الجانبي" title="طي/فتح الشريط الجانبي">◀</button>
       <nav class="nav quick-nav">
         <div class="quick-nav-title">اختصارات سريعة</div>
         <a class="{{ nav_active('dashboard') }}" href="{{ url_for('dashboard') }}"><span>⌂</span> لوحة التحكم</a>
@@ -64,6 +65,7 @@
     </main>
   </div>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script><script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+  <script>(function(){var side=document.querySelector('.sidebar'),toggle=document.getElementById('sidebar-toggle');if(side&&toggle){var key='alasly-sidebar-collapsed';if(localStorage.getItem(key)==='1')side.classList.add('is-collapsed');function sync(){var c=side.classList.contains('is-collapsed');toggle.textContent=c?'▶':'◀';toggle.setAttribute('aria-label',c?'فتح الشريط الجانبي':'طي الشريط الجانبي');}toggle.addEventListener('click',function(){side.classList.toggle('is-collapsed');localStorage.setItem(key,side.classList.contains('is-collapsed')?'1':'0');sync();});sync();}})();</script>
   <script>(function(){var node=document.getElementById("win-clock");if(!node)return;function tick(){var d=new Date();node.textContent=d.toLocaleDateString("ar-EG")+" — "+d.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}tick();setInterval(tick,1000);})();</script>
   {% block scripts %}{% endblock %}
 </body>

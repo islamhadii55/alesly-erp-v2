@@ -82,6 +82,15 @@
     </div>
   </section>
 
+  {% if late_notice %}
+  <section class="panel late-alert" data-late-alert="1" style="margin:14px 0;border:2px solid #b91c1c;background:#fff1f2;color:#991b1b">
+    <div class="panel-b" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <strong>تنبيه حضور: تجاوزت فترة السماح للتأخير بمقدار {{ late_notice.late_minutes }} دقيقة.</strong>
+      <button type="button" class="btn btn-danger" id="late-sound-btn">تشغيل التنبيه الصوتي</button>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="analytical-kpi-grid">
     <article class="kpi-card">
       <span class="kpi-card-title">إجمالي الأصناف</span>
@@ -227,4 +236,19 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% if late_notice %}<script>
+(function () {
+  var btn = document.getElementById('late-sound-btn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    var ctx = new Ctx(), osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sine'; osc.frequency.value = 880; gain.gain.value = 0.08;
+    osc.connect(gain); gain.connect(ctx.destination); osc.start();
+    setTimeout(function () { osc.frequency.value = 660; }, 180);
+    setTimeout(function () { osc.stop(); ctx.close(); }, 380);
+  });
+})();
+</script>{% endif %}
 {% endblock %}

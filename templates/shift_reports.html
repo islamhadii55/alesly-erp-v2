@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set title = "التقرير اليومي للورديات والمبيعات" %}
+{% block actions %}<a class="btn btn-ghost" href="{{ url_for('reports') }}">التقارير العامة</a>{% endblock %}
+{% block content %}
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>اختيار اليوم</h3><form method="get"><input type="date" name="date" value="{{ report_day }}"><button class="btn btn-gold">عرض التقرير</button></form></div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>ملخص المبيعات حسب الموظف — {{ report_day }}</h3></div>
+  <div class="panel-b"><table>
+    <tr><th>الموظف</th><th>عدد الفواتير</th><th>إجمالي المبيعات</th><th>المحصل</th><th>الربح</th></tr>
+    {% for r in employee_totals %}<tr><td>{{ r.employee_name or 'غير محدد' }}</td><td>{{ r.invoice_count }}</td><td class="money">{{ r.sales_total|money }}</td><td class="money">{{ r.sales_paid|money }}</td><td class="money up">{{ r.sales_profit|money }}</td></tr>{% else %}<tr><td colspan="5">لا توجد مبيعات مرتبطة بهذا اليوم.</td></tr>{% endfor %}
+  </table></div>
+</div>
+<div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>تفاصيل الورديات</h3></div>
+  <div class="panel-b"><table>
+    <tr><th>الموظف</th><th>بدء الوردية</th><th>إنهاء الوردية</th><th>الحالة</th><th>الفواتير</th><th>المبيعات</th><th>المحصل</th><th>الربح</th></tr>
+    {% for r in shift_rows %}<tr><td>{{ r.employee_name }}{% if r.job_title %}<small class="muted"> · {{ r.job_title }}</small>{% endif %}</td><td>{{ r.started_at }}</td><td>{{ r.ended_at or 'مفتوحة' }}</td><td><span class="badge {% if r.ended_at %}b-paid{% else %}b-open{% endif %}">{{ 'مغلقة' if r.ended_at else 'مفتوحة' }}</span></td><td>{{ r.invoice_count }}</td><td class="money">{{ r.sales_total|money }}</td><td class="money">{{ r.sales_paid|money }}</td><td class="money up">{{ r.sales_profit|money }}</td></tr>{% else %}<tr><td colspan="8">لا توجد ورديات مسجلة بهذا اليوم.</td></tr>{% endfor %}
+  </table></div>
+</div>
+<div class="panel">
+  <div class="panel-h"><h3>تفاصيل الفواتير المرتبطة بالموظفين</h3></div>
+  <div class="panel-b"><table>
+    <tr><th>الفاتورة</th><th>النوع</th><th>الموظف</th><th>العميل</th><th>الوردية</th><th>الإجمالي</th><th>المحصل</th><th>الربح</th></tr>
+    {% for r in invoices %}<tr><td>{{ r.number }}</td><td>{{ KIND_LABELS.get(r.kind, r.kind) }}</td><td>{{ r.employee_name or 'غير محدد' }}</td><td>{{ r.party_name }}</td><td>{{ r.shift_id or 'غير مرتبطة' }}</td><td class="money">{{ r.total|money }}</td><td class="money">{{ r.paid|money }}</td><td class="money up">{{ r.profit|money }}</td></tr>{% else %}<tr><td colspan="8">لا توجد فواتير لهذا اليوم.</td></tr>{% endfor %}
+  </table></div>
+</div>
+{% endblock %}

@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import base64
 import sqlite3
 import uuid
 from datetime import datetime, date, timedelta
@@ -26,7 +27,7 @@ try:
     from reportlab.lib.enums import TA_RIGHT
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as PdfImage
     import arabic_reshaper
     from bidi.algorithm import get_display
     pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
@@ -3430,6 +3431,16 @@ def settings():
                     "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                     (key, request.form.get(key) or ""),
                 )
+            logo_file = request.files.get("company_logo")
+            if logo_file and logo_file.filename:
+                raw_logo = logo_file.read()
+                if len(raw_logo) > 2 * 1024 * 1024:
+                    flash("حجم الشعار يجب ألا يتجاوز 2 ميجابايت", "err")
+                elif logo_file.mimetype not in ("image/png", "image/jpeg", "image/jpg", "image/gif"):
+                    flash("صيغة الشعار يجب أن تكون PNG أو JPG أو GIF", "err")
+                else:
+                    logo_data = "data:%s;base64,%s" % (logo_file.mimetype, base64.b64encode(raw_logo).decode("ascii"))
+                    execute("INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", ("company_logo_data", logo_data))
             execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 ("show_cost", "1" if request.form.get("show_cost") else "0"),
@@ -3442,7 +3453,7 @@ def settings():
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 ("sync_enabled", "1" if request.form.get("sync_enabled") else "0"),
             )
-            flash("تم حفظ إعدادات الطباعة والمزامنة", "ok")
+            flash("تم حفظ إعدادات الطباعة والمزامنة والشعار", "ok")
         return redirect(url_for("settings"))
     users = query("SELECT * FROM users ORDER BY id")
     perm_groups = []
@@ -3499,6 +3510,27 @@ def pdf_table_style():
     ])
 
 
+def pdf_company_header(styles, title):
+    settings = all_settings()
+    header = []
+    logo_data = settings.get("company_logo_data", "")
+    if logo_data.startswith("data:image/") and "," in logo_data:
+        try:
+            logo = PdfImage(io.BytesIO(base64.b64decode(logo_data.split(",", 1)[1])), width=58, height=58)
+            header.append([logo, Paragraph(rtl_pdf(settings.get("shop_name", APP_NAME)), styles["ArabicTitle"])])
+            table = Table(header, colWidths=[70, 560], style=TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "RIGHT")]))
+            result = [table]
+        except Exception:
+            result = [Paragraph(rtl_pdf(settings.get("shop_name", APP_NAME)), styles["ArabicTitle"])]
+    else:
+        result = [Paragraph(rtl_pdf(settings.get("shop_name", APP_NAME)), styles["ArabicTitle"])]
+    company_line = " | ".join(x for x in [settings.get("shop_subtitle"), settings.get("phone"), settings.get("address"), ("الرقم الضريبي: " + settings.get("tax_no", "")) if settings.get("tax_no") else ""] if x)
+    if company_line:
+        result.append(Paragraph(rtl_pdf(company_line), styles["Arabic"]))
+    result.append(Paragraph(rtl_pdf(title), styles["Arabic"]))
+    return result
+
+
 def invoice_pdf_response(inv, items, filename_prefix="فاتورة"):
     if not REPORTLAB_OK:
         flash("تصدير PDF غير متاح حاليًا على الخادم", "err")
@@ -3508,9 +3540,7 @@ def invoice_pdf_response(inv, items, filename_prefix="فاتورة"):
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="Arabic", fontName="DejaVu", fontSize=9, leading=13, alignment=TA_RIGHT))
     styles.add(ParagraphStyle(name="ArabicTitle", fontName="DejaVu", fontSize=15, leading=20, alignment=TA_RIGHT, textColor=colors.HexColor("#173653")))
-    story = [
-        Paragraph(rtl_pdf(all_settings().get("shop_name", APP_NAME)), styles["ArabicTitle"]),
-        Paragraph(rtl_pdf(f"{KIND_LABELS.get(inv['kind'], inv['kind'])} — رقم {inv['number']}"), styles["Arabic"]),
+    story = pdf_company_header(styles, f"{KIND_LABELS.get(inv['kind'], inv['kind'])} — رقم {inv['number']}") + [
         Paragraph(rtl_pdf(f"التاريخ: {inv['date']}   |   الطرف: {inv['party_name'] or '-'}   |   الحالة: {inv['status']}"), styles["Arabic"]),
         Spacer(1, 10),
     ]
@@ -3559,9 +3589,7 @@ def quote_pdf(qid):
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="QuoteArabic", fontName="DejaVu", fontSize=9, leading=13, alignment=TA_RIGHT))
     styles.add(ParagraphStyle(name="QuoteTitle", fontName="DejaVu", fontSize=15, leading=20, alignment=TA_RIGHT, textColor=colors.HexColor("#173653")))
-    story = [
-        Paragraph(rtl_pdf(all_settings().get("shop_name", APP_NAME)), styles["QuoteTitle"]),
-        Paragraph(rtl_pdf(f"عرض سعر — رقم {quote['number']}"), styles["QuoteArabic"]),
+    story = pdf_company_header({"ArabicTitle": styles["QuoteTitle"], "Arabic": styles["QuoteArabic"]}, f"عرض سعر — رقم {quote['number']}") + [
         Paragraph(rtl_pdf(f"التاريخ: {quote['date']}   |   العميل: {quote['customer_name'] or '-'}   |   الحالة: {'منفذ' if quote['invoice_id'] else 'غير منفذ'}"), styles["QuoteArabic"]),
         Spacer(1, 10),
     ]
@@ -4099,6 +4127,44 @@ def reports():
     customers = query("SELECT * FROM customers WHERE balance>0 ORDER BY balance DESC")
     suppliers = query("SELECT * FROM suppliers WHERE balance>0 ORDER BY balance DESC")
     return render_template("reports.html", period=period, label=label, sales=sales, purchases=purchases, expenses_v=expenses_v, salaries_v=salaries_v, net=float(sales["p"])-float(expenses_v)-float(salaries_v), top_qty=top_qty, top_profit=top_profit, customers=customers, suppliers=suppliers, branches=query("SELECT * FROM branches WHERE status!='معطل' ORDER BY id"), selected_branch_id=int(report_branch) if report_branch and report_branch.isdigit() else current_branch_id())
+
+
+@app.route("/reports/export.pdf")
+@login_required
+def reports_export_pdf():
+    if not REPORTLAB_OK:
+        flash("تصدير PDF غير متاح حاليًا على الخادم", "err")
+        return redirect(url_for("reports"))
+    period = request.args.get("period") or "month"
+    today = date.today()
+    if period == "day":
+        label, like = "اليوم", today.isoformat() + "%"
+    elif period == "year":
+        label, like = f"سنة {today.year}", f"{today.year}%"
+    else:
+        label, like = today.strftime("%Y-%m"), today.strftime("%Y-%m") + "%"
+    branch_sql, branch_args = branch_filter("invoices", include_all=True)
+    sales = query("SELECT COALESCE(SUM(total),0) s, COALESCE(SUM(profit),0) p FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?" + branch_sql, [like] + branch_args, one=True)
+    purchases = query("SELECT COALESCE(SUM(total),0) s FROM invoices WHERE kind='purchase' AND status!='ملغاة' AND date LIKE ?" + branch_sql, [like] + branch_args, one=True)
+    expenses_v = query("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE date LIKE ?", (like,), one=True)["v"]
+    salaries_v = query("SELECT COALESCE(SUM(net),0) v FROM salaries WHERE paid_at LIKE ?", (like,), one=True)["v"]
+    top_sql = " AND v.branch_id=?" if branch_sql else ""
+    top_args = [like] + (branch_args if branch_sql else [])
+    top_rows = query("SELECT p.name, p.sku, SUM(i.qty) qty, SUM(i.line_total) sales, SUM(i.line_profit) profit FROM invoice_items i JOIN invoices v ON v.id=i.invoice_id JOIN products p ON p.id=i.product_id WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?" + top_sql + " GROUP BY p.id ORDER BY sales DESC LIMIT 15", top_args)
+    stream = io.BytesIO()
+    doc = SimpleDocTemplate(stream, pagesize=landscape(A4), rightMargin=28, leftMargin=28, topMargin=28, bottomMargin=28)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="ReportArabic", fontName="DejaVu", fontSize=9, leading=13, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name="ReportTitle", fontName="DejaVu", fontSize=15, leading=20, alignment=TA_RIGHT, textColor=colors.HexColor("#173653")))
+    story = pdf_company_header({"ArabicTitle": styles["ReportTitle"], "Arabic": styles["ReportArabic"]}, f"التقرير المالي — {label}")
+    summary = [[rtl_pdf(x) for x in ["المبيعات", "المشتريات", "المصروفات", "الرواتب", "صافي الدخل"]], [money(sales["s"]), money(purchases["s"]), money(expenses_v), money(salaries_v), money(float(sales["p"]) - float(expenses_v) - float(salaries_v))]]
+    story += [Table(summary, colWidths=[130] * 5, style=pdf_table_style()), Spacer(1, 14), Paragraph(rtl_pdf("الأصناف الأكثر مبيعًا"), styles["ReportTitle"])]
+    data = [[rtl_pdf(x) for x in ["الصنف", "الكود", "الكمية", "المبيعات", "الربح"]]]
+    data += [[Paragraph(rtl_pdf(r["name"]), styles["ReportArabic"]), str(r["sku"]), str(r["qty"]), money(r["sales"]), money(r["profit"])] for r in top_rows]
+    story.append(Table(data, repeatRows=1, colWidths=[290, 110, 90, 110, 110], style=pdf_table_style()))
+    doc.build(story)
+    stream.seek(0)
+    return send_file(stream, as_attachment=True, download_name=f"التقرير-المالي-{period}.pdf", mimetype="application/pdf")
 @app.route("/reports/shifts")
 @login_required
 def shift_reports():
@@ -4235,6 +4301,34 @@ def payroll_deductions():
         preview = attendance_preview(emp["id"], period)
         rows.append({"employee": emp, **preview, "daily": round(float(emp["salary"] or 0) / 30.0, 2), "net_before_bonus": round(float(emp["salary"] or 0) - preview["deduct"], 2)})
     return render_template("payroll_deductions.html", period=period, rows=rows, total_deduct=sum(r["deduct"] for r in rows))
+
+
+@app.route("/reports/payroll-deductions/export.pdf")
+@login_required
+def payroll_deductions_export_pdf():
+    if not REPORTLAB_OK:
+        flash("تصدير PDF غير متاح حاليًا على الخادم", "err")
+        return redirect(url_for("payroll_deductions"))
+    period = request.args.get("period") or date.today().strftime("%Y-%m")
+    emp_sql = "SELECT * FROM employees WHERE status='نشط'"
+    emp_branch_sql, emp_branch_args = branch_filter("employees")
+    emps = query(emp_sql + emp_branch_sql + " ORDER BY name", emp_branch_args)
+    rows = []
+    for emp in emps:
+        preview = attendance_preview(emp["id"], period)
+        rows.append({"employee": emp, **preview, "daily": round(float(emp["salary"] or 0) / 30.0, 2), "net_before_bonus": round(float(emp["salary"] or 0) - preview["deduct"], 2)})
+    stream = io.BytesIO()
+    doc = SimpleDocTemplate(stream, pagesize=landscape(A4), rightMargin=28, leftMargin=28, topMargin=28, bottomMargin=28)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="PayrollArabic", fontName="DejaVu", fontSize=8, leading=12, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name="PayrollTitle", fontName="DejaVu", fontSize=15, leading=20, alignment=TA_RIGHT, textColor=colors.HexColor("#173653")))
+    story = pdf_company_header({"ArabicTitle": styles["PayrollTitle"], "Arabic": styles["PayrollArabic"]}, f"مراجعة الخصومات الشهرية — {period}")
+    data = [[rtl_pdf(x) for x in ["الموظف", "الراتب", "اليومية", "أيام الغياب", "دقائق التأخير", "الخصم", "الصافي المتوقع"]]]
+    data += [[Paragraph(rtl_pdf(r["employee"]["name"]), styles["PayrollArabic"]), money(r["employee"]["salary"]), money(r["daily"]), str(r["absence_days"]), str(r["late_minutes"]), money(r["deduct"]), money(r["net_before_bonus"])] for r in rows]
+    story += [Table(data, repeatRows=1, colWidths=[180, 95, 90, 95, 110, 95, 110], style=pdf_table_style()), Spacer(1, 10), Paragraph(rtl_pdf(f"إجمالي الخصومات المقترحة: {money(sum(r['deduct'] for r in rows))}"), styles["PayrollArabic"])]
+    doc.build(story)
+    stream.seek(0)
+    return send_file(stream, as_attachment=True, download_name=f"خصومات-الرواتب-{period}.pdf", mimetype="application/pdf")
 
 
 @app.route("/api/barcode")

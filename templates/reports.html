@@ -2,6 +2,7 @@
 {% set title = "التقارير واللوحة الإحصائية" %}
 {% block actions %}
 <a class="btn btn-navy" href="{{ url_for('shift_reports') }}">تقرير الورديات اليومي</a>
+<a class="btn btn-gold" href="{{ url_for('reports_export_pdf', period=period, branch_id=request.args.get('branch_id','')) }}">تصدير التقرير المالي PDF</a>
 <a class="btn {% if period=='day' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='day') }}">يومي</a>
 <a class="btn {% if period=='month' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='month') }}">شهري</a>
 <a class="btn {% if period=='year' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='year') }}">سنوي</a>

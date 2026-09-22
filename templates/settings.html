@@ -105,13 +105,14 @@
   <div class="panel">
     <div class="panel-h"><h3>إعدادات الطباعة</h3></div>
     <div class="panel-b">
-      <form method="post">
+          <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="action" value="save_print">
         <div class="field" style="margin-bottom:10px"><label>اسم المحل على الفاتورة</label><input name="shop_name" value="{{ settings.get('shop_name','') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>الوصف</label><input name="shop_subtitle" value="{{ settings.get('shop_subtitle','') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>الهاتف</label><input name="phone" value="{{ settings.get('phone','') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>العنوان</label><input name="address" value="{{ settings.get('address','') }}"></div>
-        <div class="field" style="margin-bottom:10px"><label>الرقم الضريبي</label><input name="tax_no" value="{{ settings.get('tax_no','') }}"></div>
+          <div class="field" style="margin-bottom:10px"><label>الرقم الضريبي</label><input name="tax_no" value="{{ settings.get('tax_no','') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>شعار الشركة في ملفات PDF</label><input type="file" name="company_logo" accept="image/png,image/jpeg,image/gif"><small class="muted">PNG أو JPG أو GIF — الحد الأقصى 2 ميجابايت. يظل الشعار الحالي محفوظًا إذا لم تختر ملفًا جديدًا.</small></div>
         <div class="field" style="margin-bottom:10px"><label>حجم الورق</label>
           <select name="paper_size">
             <option value="A4" {% if settings.get('paper_size')=='A4' %}selected{% endif %}>A4</option>

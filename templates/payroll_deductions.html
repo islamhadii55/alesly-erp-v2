@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set title = "مراجعة خصومات الحضور الشهرية" %}
-{% block actions %}<a class="btn btn-ghost" href="{{ url_for('salaries') }}">الرواتب</a>{% endblock %}
+{% block actions %}<a class="btn btn-gold" href="{{ url_for('payroll_deductions_export_pdf', period=period) }}">تصدير PDF</a><a class="btn btn-ghost" href="{{ url_for('salaries') }}">الرواتب</a>{% endblock %}
 {% block content %}
 <div class="panel" style="margin-bottom:14px">
   <div class="panel-h"><h3>اختيار الشهر</h3><form method="get"><input type="month" name="period" value="{{ period }}"><button class="btn btn-gold">عرض</button></form></div>

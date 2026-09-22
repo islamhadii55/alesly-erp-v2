@@ -7,6 +7,7 @@
 <a class="btn {% if period=='year' %}btn-gold{% else %}btn-ghost{% endif %}" href="{{ url_for('reports', period='year') }}">سنوي</a>
 {% endblock %}
 {% block content %}
+<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>تصفية التقرير حسب الفرع</h3><form method="get"><input type="hidden" name="period" value="{{ period }}"><select name="branch_id"><option value="">كل الفروع</option>{% for br in branches %}<option value="{{ br.id }}">{{ br.name }}</option>{% endfor %}</select><button class="btn btn-ghost">تطبيق</button></form></div></div>
 <div class="cards">
   <div class="card kpi"><div class="label">مبيعات {{ label }}</div><div class="value">{{ sales.s|money }}</div><div class="hint up">مجمل ربح {{ sales.p|money }}</div></div>
   <div class="card kpi"><div class="label">مشتريات</div><div class="value">{{ purchases.s|money }}</div></div>

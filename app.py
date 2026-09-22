@@ -75,6 +75,7 @@ app.config.update(
 # Permission modules: key -> (label, group)
 PERMISSION_MODULES = (
     ("dashboard", "لوحة التحكم", "الرئيسية"),
+    ("branches", "الفروع وإدارة التوزيع", "الإدارة"),
     ("pos", "كاشير قطع الغيار", "المبيعات والورشة"),
     ("sales", "فواتير البيع والمرتجعات والصيانة", "المبيعات والورشة"),
     ("quotes", "عروض الأسعار", "المبيعات والورشة"),
@@ -163,6 +164,9 @@ ENDPOINT_PERMISSIONS = {
     "advances": "hr",
     "salaries": "hr",
     "settings": "settings",
+    "branches": "branches",
+    "branch_select": "branches",
+    "branch_transfer": "branches",
 }
 
 # Kinds handled by the sales vs purchases permission
@@ -914,6 +918,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS branches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
+            code TEXT UNIQUE,
+            status TEXT NOT NULL DEFAULT 'نشط',
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
             address TEXT,
             phone TEXT
         );
@@ -1132,6 +1140,15 @@ def init_db():
             ("permissions", "TEXT NOT NULL DEFAULT 'sales,shift'"),
         ),
     )
+    # Branch migration is additive: existing installations keep all legacy columns/data.
+    ensure_columns("branches", (("code", "TEXT"), ("status", "TEXT NOT NULL DEFAULT 'نشط'"), ("is_default", "INTEGER NOT NULL DEFAULT 0"), ("created_at", "TEXT")))
+    ensure_columns("users", (("branch_id", "INTEGER"),))
+    ensure_columns("employees", (("branch_id", "INTEGER"),))
+    ensure_columns("invoices", (("branch_id", "INTEGER"),))
+    ensure_columns("shifts", (("branch_id", "INTEGER"),))
+    ensure_columns("production_orders", (("branch_id", "INTEGER"),))
+    ensure_columns("stock_moves", (("branch_id", "INTEGER"),))
+    ensure_columns("stock_counts", (("branch_id", "INTEGER"),))
     ensure_columns("employees", (("username", "TEXT"),))
     ensure_columns("shifts", (("employee_id", "INTEGER"),))
     ensure_columns(
@@ -1222,11 +1239,27 @@ def init_db():
     if conn.execute("SELECT COUNT(*) FROM unit_defs").fetchone()[0] == 0:
         for uname in ("قطعة", "طقم", "علبة", "زوج", "لتر", "متر"):
             conn.execute("INSERT OR IGNORE INTO unit_defs (name) VALUES (?)", (uname,))
-    if conn.execute("SELECT COUNT(*) FROM branches").fetchone()[0] == 0:
+    # Seed exactly the three initial branches; the legacy branch is always the default.
+    branch_seed = (("الفرع الرئيسي", "MAIN"), ("فرع الورشة", "WORKSHOP"), ("فرع التصنيع", "MANUFACTURING"))
+    for branch_name, branch_code in branch_seed:
         conn.execute(
-            "INSERT INTO branches (name, address, phone) VALUES (?,?,?)",
-            ("الفرع الرئيسي", "المملكة العربية السعودية", "0120000000"),
+            "INSERT OR IGNORE INTO branches (name, code, status, is_default, created_at, address, phone) VALUES (?,?,?,?,?,?,?)",
+            (branch_name, branch_code, "نشط", 1 if branch_code == "MAIN" else 0, now, "المملكة العربية السعودية", "0120000000"),
         )
+    conn.execute("UPDATE branches SET created_at=COALESCE(NULLIF(created_at,''),?)", (now,))
+    conn.execute("UPDATE branches SET code=CASE id WHEN (SELECT MIN(id) FROM branches) THEN 'MAIN' ELSE COALESCE(code,'BR-'||id) END WHERE code IS NULL OR code='' ")
+    conn.execute("UPDATE branches SET status='نشط' WHERE status IS NULL OR status='' ")
+    conn.execute("UPDATE branches SET is_default=0")
+    conn.execute("UPDATE branches SET is_default=1 WHERE name='الفرع الرئيسي' OR id=(SELECT MIN(id) FROM branches)")
+    main_branch_id = conn.execute("SELECT id FROM branches WHERE is_default=1 ORDER BY id LIMIT 1").fetchone()[0]
+    # Legacy rows are assigned to the default branch.
+    for table in ("users", "employees", "invoices", "shifts", "production_orders", "stock_moves", "stock_counts"):
+        if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]:
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if "branch_id" in cols:
+                conn.execute(f"UPDATE {table} SET branch_id=? WHERE branch_id IS NULL", (main_branch_id,))
+    conn.execute("UPDATE users SET branch_id=? WHERE branch_id IS NULL", (main_branch_id,))
+    conn.execute("UPDATE employees SET branch_id=? WHERE branch_id IS NULL", (main_branch_id,))
     if conn.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0:
         products = [
             ("BRK-001", "تيل فرامل أمامي", "فرامل", "Brembo", "تويوتا كورولا", "طقم", 85, 140, 24, "A-1"),
@@ -1423,8 +1456,8 @@ def save_invoice(kind, form, related_id=None):
         """INSERT INTO invoices
            (number, kind, party_type, party_id, party_name, date, status, subtotal, discount, tax,
             total, paid, cost_total, profit, vehicle, related_id, notes, created_by, payment_method, labor_total,
-            due_date, salesperson, coupon_code, cash_account_id, shift_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            due_date, salesperson, coupon_code, cash_account_id, shift_id, branch_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             number,
             kind,
@@ -1451,6 +1484,7 @@ def save_invoice(kind, form, related_id=None):
             coupon_code,
             cash_acc["id"] if cash_acc else None,
             active_shift["id"] if active_shift else None,
+            current_branch_id(),
         ),
     )
     for item in items:
@@ -1547,7 +1581,8 @@ def save_invoice(kind, form, related_id=None):
 
 
 def cancel_invoice(inv_id):
-    inv = query("SELECT * FROM invoices WHERE id=?", (inv_id,), one=True)
+    inv_sql, inv_args = branch_filter("invoices", include_all=True)
+    inv = query("SELECT * FROM invoices WHERE id=?" + inv_sql, [inv_id] + inv_args, one=True)
     if not inv:
         raise ValueError("المستند غير موجود")
     if inv["status"] == "ملغاة":
@@ -1736,15 +1771,54 @@ def award_points(customer_id, total):
         execute("UPDATE customers SET points = COALESCE(points,0) + ? WHERE id=?", (pts, customer_id))
 
 
+def current_branch():
+    """Return the active branch; administrators may select it, legacy sessions fall back safely."""
+    try:
+        if not has_table_column("branches", "id"):
+            return None
+        branch_id = session.get("branch_id")
+        if session.get("role") != "مدير":
+            user = query("SELECT branch_id FROM users WHERE username=?", (session.get("user"),), one=True) if session.get("user") else None
+            branch_id = (user["branch_id"] if user and user["branch_id"] else branch_id) if user else branch_id
+        branch = query("SELECT * FROM branches WHERE id=? AND status!='معطل'", (branch_id,), one=True) if branch_id else None
+        if branch:
+            return branch
+        return query("SELECT * FROM branches WHERE is_default=1 AND status!='معطل' ORDER BY id LIMIT 1", one=True)
+    except sqlite3.Error:
+        return None
+
+def current_branch_id():
+    branch = current_branch()
+    return branch["id"] if branch else None
+
+def has_table_column(table, column):
+    try:
+        return any(r[1] == column for r in db().execute(f"PRAGMA table_info({table})").fetchall())
+    except sqlite3.Error:
+        return False
+
+def branch_filter(alias=None, include_all=False):
+    """Return SQL predicate/params while remaining compatible with pre-migration databases."""
+    schema_table = {"s": "shifts", "v": "invoices", "e": "employees"}.get(alias, alias or "invoices")
+    if not has_table_column(schema_table, "branch_id"):
+        return "", []
+    if include_all and session.get("role") == "مدير" and request.args.get("branch_id") in ("all", ""):
+        return "", []
+    bid = current_branch_id()
+    if bid is None:
+        return "", []
+    prefix = (alias + ".") if alias else ""
+    return f" AND {prefix}branch_id=?", [bid]
+
+
 def current_shift(username=None):
     username = username or session.get("user")
     if not username:
         return None
-    return query(
-        "SELECT * FROM shifts WHERE username=? AND ended_at IS NULL ORDER BY id DESC LIMIT 1",
-        (username,),
-        one=True,
-    )
+    sql = "SELECT * FROM shifts WHERE username=? AND ended_at IS NULL"
+    args = [username]
+    extra, extra_args = branch_filter("shifts")
+    return query(sql + extra + " ORDER BY id DESC LIMIT 1", args + extra_args, one=True)
 
 
 def current_employee(username=None):
@@ -2302,6 +2376,8 @@ def inject():
         "today": date.today().isoformat(),
         "user": session.get("user"),
         "role": session.get("role"),
+        "current_branch": current_branch() if session.get("user") else None,
+        "branches": query("SELECT * FROM branches WHERE status!='معطل' ORDER BY id") if session.get("user") else [],
         "kind": (request.view_args or {}).get("kind"),
         "print_settings": all_settings() if session.get("user") else {},
         "open_shift": current_shift() if session.get("user") else None,
@@ -2338,6 +2414,7 @@ def login():
             session["role"] = user["role"]
             session["user_id"] = user["id"]
             session["permissions"] = user["permissions"] or ""
+            session["branch_id"] = user["branch_id"] if "branch_id" in user.keys() and user["branch_id"] else (query("SELECT id FROM branches WHERE is_default=1 ORDER BY id LIMIT 1", one=True)["id"])
             return redirect(url_for("dashboard"))
         flash("بيانات الدخول غير صحيحة", "err")
     return render_template("login.html")
@@ -2926,12 +3003,81 @@ def delete_supplier(sid):
     return redirect(url_for("suppliers"))
 
 
+@app.route("/branches", methods=["GET", "POST"])
+@login_required
+def branches():
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+        try:
+            if action == "assign_user":
+                execute("UPDATE users SET branch_id=? WHERE id=?", (request.form.get("branch_id") or None, request.form.get("user_id")))
+                flash("تم ربط المستخدم بالفرع", "ok")
+            elif action == "toggle":
+                bid = int(request.form["branch_id"])
+                if bid == current_branch_id():
+                    flash("لا يمكن تعطيل الفرع الحالي", "err")
+                else:
+                    execute("UPDATE branches SET status=? WHERE id=?", ("معطل" if request.form.get("status") == "نشط" else "نشط", bid))
+                    flash("تم تحديث حالة الفرع", "ok")
+            elif action == "default":
+                bid = int(request.form["branch_id"])
+                execute("UPDATE branches SET is_default=0")
+                execute("UPDATE branches SET is_default=1,status='نشط' WHERE id=?", (bid,))
+                flash("تم تعيين الفرع الافتراضي", "ok")
+            else:
+                name = (request.form.get("name") or "").strip()
+                if not name: raise ValueError("اسم الفرع مطلوب")
+                bid = request.form.get("id")
+                if bid:
+                    execute("UPDATE branches SET name=?,code=?,status=? WHERE id=?", (name, request.form.get("code") or None, request.form.get("status") or "نشط", bid))
+                else:
+                    execute("INSERT INTO branches (name,code,status,is_default,created_at) VALUES (?,?,?,0,?)", (name, request.form.get("code") or None, request.form.get("status") or "نشط", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                flash("تم حفظ الفرع", "ok")
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            flash(str(exc), "err")
+        return redirect(url_for("branches"))
+    return render_template("branches.html", branches=query("SELECT * FROM branches ORDER BY id"), users=query("SELECT id,username,full_name,role,branch_id FROM users ORDER BY full_name"), warehouses=query("SELECT id,name,branch FROM warehouses ORDER BY id"))
+
+@app.route("/branches/select", methods=["POST"])
+@login_required
+def branch_select():
+    if session.get("role") != "مدير":
+        flash("اختيار الفرع متاح للمدير فقط", "err")
+        return redirect(request.referrer or url_for("dashboard"))
+    bid = request.form.get("branch_id")
+    branch = query("SELECT id FROM branches WHERE id=? AND status!='معطل'", (bid,), one=True)
+    if branch:
+        session["branch_id"] = branch["id"]
+        flash("تم تغيير الفرع الحالي", "ok")
+    return redirect(request.referrer or url_for("dashboard"))
+
+@app.route("/branches/transfer", methods=["POST"])
+@login_required
+def branch_transfer():
+    try:
+        product_id, source_id, dest_id = int(request.form["product_id"]), int(request.form["source_id"]), int(request.form["dest_id"])
+        qty = float(request.form["qty"])
+        if qty <= 0 or source_id == dest_id: raise ValueError("تحقق من المخازن والكمية")
+        src = query("SELECT qty FROM stock_balances WHERE warehouse_id=? AND product_id=?", (source_id, product_id), one=True)
+        available = float(src["qty"] if src else 0)
+        if available < qty: raise ValueError("الكمية المتاحة في المصدر غير كافية")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        execute("UPDATE stock_balances SET qty=qty-? WHERE warehouse_id=? AND product_id=?", (qty, source_id, product_id))
+        execute("INSERT INTO stock_balances (warehouse_id,product_id,qty) VALUES (?,?,?) ON CONFLICT(warehouse_id,product_id) DO UPDATE SET qty=qty+excluded.qty", (dest_id, product_id, qty))
+        execute("INSERT INTO stock_moves (product_id,qty,unit_cost,move_type,ref,date,notes,branch_id) VALUES (?,?,?,?,?,?,?,?)", (product_id,-qty,0,"تحويل فرعي",f"{source_id}->{dest_id}",now,"تحويل بين الفروع",current_branch_id()))
+        execute("INSERT INTO stock_moves (product_id,qty,unit_cost,move_type,ref,date,notes,branch_id) VALUES (?,?,?,?,?,?,?,?)", (product_id,qty,0,"تحويل فرعي",f"{source_id}->{dest_id}",now,"استلام تحويل بين الفروع",current_branch_id()))
+        flash("تم نقل الكمية وتسجيل الحركتين", "ok")
+    except (ValueError, KeyError, sqlite3.Error) as exc:
+        flash(str(exc), "err")
+    return redirect(url_for("branches"))
+
 @app.route("/invoices/<kind>")
 @login_required
 def invoices_list(kind):
     if kind not in KIND_LABELS:
         return redirect(url_for("dashboard"))
-    rows = query("SELECT * FROM invoices WHERE kind=? ORDER BY id DESC", (kind,))
+    inv_sql, inv_args = branch_filter("invoices", include_all=True)
+    rows = query("SELECT * FROM invoices WHERE kind=?" + inv_sql + " ORDER BY id DESC", [kind] + inv_args)
     return render_template("invoices.html", kind=kind, rows=rows)
 
 
@@ -3835,95 +3981,63 @@ def expenses():
 @login_required
 def reports():
     period = request.args.get("period") or "month"
+    report_branch = request.args.get("branch_id")
     today = date.today()
     if period == "day":
-        start = today.isoformat()
-        label = "اليوم"
-        like = start + "%"
+        label, like = "اليوم", today.isoformat() + "%"
     elif period == "year":
-        start = f"{today.year}-01-01"
-        label = f"سنة {today.year}"
-        like = f"{today.year}%"
+        label, like = f"سنة {today.year}", f"{today.year}%"
     else:
-        start = today.strftime("%Y-%m-01")
-        label = today.strftime("%Y-%m")
-        like = today.strftime("%Y-%m") + "%"
-    sales = query(
-        "SELECT COALESCE(SUM(total),0) s, COALESCE(SUM(profit),0) p FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?",
-        (like,),
-        one=True,
-    )
-    purchases = query(
-        "SELECT COALESCE(SUM(total),0) s FROM invoices WHERE kind='purchase' AND status!='ملغاة' AND date LIKE ?",
-        (like,),
-        one=True,
-    )
+        label, like = today.strftime("%Y-%m"), today.strftime("%Y-%m") + "%"
+    branch_sql, branch_args = branch_filter("invoices", include_all=True)
+    if session.get("role") == "مدير" and report_branch and report_branch.isdigit():
+        branch_sql, branch_args = " AND invoices.branch_id=?", [int(report_branch)]
+    sales = query("SELECT COALESCE(SUM(total),0) s, COALESCE(SUM(profit),0) p FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?" + branch_sql, [like] + branch_args, one=True)
+    purchases = query("SELECT COALESCE(SUM(total),0) s FROM invoices WHERE kind='purchase' AND status!='ملغاة' AND date LIKE ?" + branch_sql, [like] + branch_args, one=True)
     expenses_v = query("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE date LIKE ?", (like,), one=True)["v"]
     salaries_v = query("SELECT COALESCE(SUM(net),0) v FROM salaries WHERE paid_at LIKE ?", (like,), one=True)["v"]
-    top_qty = query(
-        """SELECT p.name, p.sku, SUM(i.qty) qty, SUM(i.line_total) sales, SUM(i.line_profit) profit
-           FROM invoice_items i JOIN invoices v ON v.id=i.invoice_id JOIN products p ON p.id=i.product_id
-           WHERE v.kind IN ('sale','maintenance') AND v.date LIKE ?
-           GROUP BY p.id ORDER BY qty DESC LIMIT 10""",
-        (like,),
-    )
-    top_profit = query(
-        """SELECT p.name, p.sku, SUM(i.qty) qty, SUM(i.line_total) sales, SUM(i.line_profit) profit
-           FROM invoice_items i JOIN invoices v ON v.id=i.invoice_id JOIN products p ON p.id=i.product_id
-           WHERE v.kind IN ('sale','maintenance') AND v.date LIKE ?
-           GROUP BY p.id ORDER BY profit DESC LIMIT 10""",
-        (like,),
-    )
+    top_sql = " AND v.branch_id=?" if branch_sql else ""
+    top_args = [like] + (branch_args if branch_sql else [])
+    top_qty = query("SELECT p.name, p.sku, SUM(i.qty) qty, SUM(i.line_total) sales, SUM(i.line_profit) profit FROM invoice_items i JOIN invoices v ON v.id=i.invoice_id JOIN products p ON p.id=i.product_id WHERE v.kind IN ('sale','maintenance') AND v.date LIKE ?" + top_sql + " GROUP BY p.id ORDER BY qty DESC LIMIT 10", top_args)
+    top_profit = query("SELECT p.name, p.sku, SUM(i.qty) qty, SUM(i.line_total) sales, SUM(i.line_profit) profit FROM invoice_items i JOIN invoices v ON v.id=i.invoice_id JOIN products p ON p.id=i.product_id WHERE v.kind IN ('sale','maintenance') AND v.date LIKE ?" + top_sql + " GROUP BY p.id ORDER BY profit DESC LIMIT 10", top_args)
     customers = query("SELECT * FROM customers WHERE balance>0 ORDER BY balance DESC")
     suppliers = query("SELECT * FROM suppliers WHERE balance>0 ORDER BY balance DESC")
-    net = float(sales["p"]) - float(expenses_v) - float(salaries_v)
-    return render_template(
-        "reports.html",
-        period=period,
-        label=label,
-        sales=sales,
-        purchases=purchases,
-        expenses_v=expenses_v,
-        salaries_v=salaries_v,
-        net=net,
-        top_qty=top_qty,
-        top_profit=top_profit,
-        customers=customers,
-        suppliers=suppliers,
-    )
-
-
+    return render_template("reports.html", period=period, label=label, sales=sales, purchases=purchases, expenses_v=expenses_v, salaries_v=salaries_v, net=float(sales["p"])-float(expenses_v)-float(salaries_v), top_qty=top_qty, top_profit=top_profit, customers=customers, suppliers=suppliers, branches=query("SELECT * FROM branches WHERE status!='معطل' ORDER BY id"), selected_branch_id=int(report_branch) if report_branch and report_branch.isdigit() else current_branch_id())
 @app.route("/reports/shifts")
 @login_required
 def shift_reports():
     report_day = request.args.get("date") or date.today().isoformat()
+    report_branch = request.args.get("branch_id")
+    shift_sql, shift_args = branch_filter("s", include_all=True)
+    invoice_sql, invoice_args = branch_filter("v", include_all=True)
+    if session.get("role") == "مدير" and report_branch and report_branch.isdigit():
+        shift_sql, shift_args = " AND s.branch_id=?", [int(report_branch)]
+        invoice_sql, invoice_args = " AND v.branch_id=?", [int(report_branch)]
     shift_rows = query(
-        """SELECT s.*, COALESCE(e.name, s.username) employee_name, e.job_title,
+        """SELECT s.*, b.name branch_name, COALESCE(e.name, s.username) employee_name, e.job_title,
                   COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
                   COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
            FROM shifts s
            LEFT JOIN employees e ON e.id=s.employee_id
+           LEFT JOIN branches b ON b.id=s.branch_id
            LEFT JOIN invoices v ON v.shift_id=s.id AND v.kind IN ('sale','maintenance') AND v.status!='ملغاة'
-           WHERE substr(s.started_at,1,10)=?
-           GROUP BY s.id ORDER BY s.started_at DESC""",
-        (report_day,),
+           WHERE substr(s.started_at,1,10)=?""" + shift_sql + " GROUP BY s.id ORDER BY s.started_at DESC",
+        [report_day] + shift_args,
     )
     employee_totals = query(
         """SELECT COALESCE(e.name, v.salesperson) employee_name, v.salesperson,
                   COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
                   COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
            FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson
-           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?
-           GROUP BY v.salesperson, e.name ORDER BY sales_total DESC""",
-        (report_day + "%",),
+           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?""" + invoice_sql + " GROUP BY v.salesperson, e.name ORDER BY sales_total DESC",
+        [report_day + "%"] + invoice_args,
     )
     invoices = query(
         """SELECT v.number, v.date, v.kind, v.party_name, v.total, v.paid, v.profit,
-                  v.salesperson, COALESCE(e.name, v.salesperson) employee_name, v.shift_id
-           FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson
-           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?
-           ORDER BY v.id DESC""",
-        (report_day + "%",),
+                  b.name branch_name, v.salesperson, COALESCE(e.name, v.salesperson) employee_name, v.shift_id
+           FROM invoices v LEFT JOIN employees e ON e.username=v.salesperson LEFT JOIN branches b ON b.id=v.branch_id
+           WHERE v.kind IN ('sale','maintenance') AND v.status!='ملغاة' AND v.date LIKE ?""" + invoice_sql + " ORDER BY v.id DESC",
+        [report_day + "%"] + invoice_args,
     )
     return render_template(
         "shift_reports.html", report_day=report_day, shift_rows=shift_rows,
@@ -3933,10 +4047,11 @@ def shift_reports():
 
 def shift_report_data(report_day):
     shift_rows = query(
-        """SELECT s.*, COALESCE(e.name, s.username) employee_name, e.job_title,
+        """SELECT s.*, b.name branch_name, COALESCE(e.name, s.username) employee_name, e.job_title,
                   COUNT(v.id) invoice_count, COALESCE(SUM(v.total),0) sales_total,
                   COALESCE(SUM(v.paid),0) sales_paid, COALESCE(SUM(v.profit),0) sales_profit
            FROM shifts s LEFT JOIN employees e ON e.id=s.employee_id
+           LEFT JOIN branches b ON b.id=s.branch_id
            LEFT JOIN invoices v ON v.shift_id=s.id AND v.kind IN ('sale','maintenance') AND v.status!='ملغاة'
            WHERE substr(s.started_at,1,10)=? GROUP BY s.id ORDER BY s.started_at DESC""", (report_day,)
     )
@@ -4016,7 +4131,9 @@ def shift_report_export_pdf():
 @login_required
 def payroll_deductions():
     period = request.args.get("period") or date.today().strftime("%Y-%m")
-    emps = query("SELECT * FROM employees WHERE status='نشط' ORDER BY name")
+    emp_sql = "SELECT * FROM employees WHERE status='نشط'"
+    emp_branch_sql, emp_branch_args = branch_filter("employees")
+    emps = query(emp_sql + emp_branch_sql + " ORDER BY name", emp_branch_args)
     rows = []
     for emp in emps:
         preview = attendance_preview(emp["id"], period)
@@ -4081,8 +4198,8 @@ def shift_open():
         (employee["id"], today), one=True,
     )
     execute(
-        "INSERT INTO shifts (username, started_at, opening_cash, employee_id) VALUES (?,?,?,?)",
-        (session.get("user"), started.strftime("%Y-%m-%d %H:%M"), float(request.form.get("opening_cash") or 0), employee["id"]),
+        "INSERT INTO shifts (username, started_at, opening_cash, employee_id, branch_id) VALUES (?,?,?,?,?)",
+        (session.get("user"), started.strftime("%Y-%m-%d %H:%M"), float(request.form.get("opening_cash") or 0), employee["id"], current_branch_id()),
     )
     shift_id = db().execute("SELECT last_insert_rowid()").fetchone()[0]
     if attendance:
@@ -4698,12 +4815,12 @@ def manufacturing():
                 number = next_number("MO", "production_orders")
                 order_id = execute(
                     """INSERT INTO production_orders
-                       (number,product_id,planned_qty,status,current_stage,opened_at,labor_cost,overhead_cost,warehouse_id,notes,created_by)
-                       VALUES (?,?,?,'مفتوح','تجهيز',?,?,?,?,?,?)""",
+                       (number,product_id,planned_qty,status,current_stage,opened_at,labor_cost,overhead_cost,warehouse_id,notes,created_by,branch_id)
+                       VALUES (?,?,?,'مفتوح','تجهيز',?,?,?,?,?,?,?)""",
                     (number, product_id, planned, manufacturing_now(),
                      float(request.form.get("labor_cost") or (bom["labor_cost"] if bom else 0)),
                      float(request.form.get("overhead_cost") or (bom["overhead_cost"] if bom else 0)),
-                     request.form.get("warehouse_id") or None, request.form.get("order_notes"), session.get("user")),
+                     request.form.get("warehouse_id") or None, request.form.get("order_notes"), session.get("user"), current_branch_id()),
                 )
                 for sequence, stage in enumerate(("تجهيز", "تصنيع", "فحص"), 1):
                     execute("INSERT INTO production_stages (order_id,name,sequence,status) VALUES (?,?,?,'معلق')", (order_id, stage, sequence))
@@ -4716,9 +4833,10 @@ def manufacturing():
     materials = query("SELECT * FROM raw_materials ORDER BY name")
     products = query("SELECT id,sku,name,unit,cost,qty FROM products WHERE item_type IS NULL OR item_type!='خدمة' ORDER BY name")
     boms = query("""SELECT b.*, p.name product_name, p.sku FROM manufacturing_boms b JOIN products p ON p.id=b.product_id ORDER BY b.id DESC""")
-    orders = query("""SELECT o.*, p.name product_name, p.sku FROM production_orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC""")
+    mo_sql, mo_args = branch_filter("o", include_all=True)
+    orders = query("SELECT o.*, p.name product_name, p.sku FROM production_orders o JOIN products p ON p.id=o.product_id WHERE 1=1" + mo_sql + " ORDER BY o.id DESC", mo_args)
     selected_id = request.args.get("order_id", type=int) or (orders[0]["id"] if orders else None)
-    selected = query("SELECT o.*, p.name product_name, p.sku FROM production_orders o JOIN products p ON p.id=o.product_id WHERE o.id=?", (selected_id,), one=True) if selected_id else None
+    selected = query("SELECT o.*, p.name product_name, p.sku FROM production_orders o JOIN products p ON p.id=o.product_id WHERE o.id=?" + mo_sql, [selected_id] + mo_args, one=True) if selected_id else None
     stages = query("SELECT * FROM production_stages WHERE order_id=? ORDER BY sequence", (selected_id,)) if selected_id else []
     moves = query("""SELECT m.*, r.name material_name, r.code FROM raw_material_moves m JOIN raw_materials r ON r.id=m.raw_material_id
                     WHERE m.reference_type='production_order' AND m.reference_id=? ORDER BY m.id DESC""", (selected_id,)) if selected_id else []

@@ -31,7 +31,7 @@ try:
     from bidi.algorithm import get_display
     pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
     REPORTLAB_OK = True
-except ImportError:
+except Exception:
     REPORTLAB_OK = False
 
 

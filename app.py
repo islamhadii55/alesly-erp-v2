@@ -1149,6 +1149,7 @@ def init_db():
     ensure_columns("production_orders", (("branch_id", "INTEGER"),))
     ensure_columns("stock_moves", (("branch_id", "INTEGER"),))
     ensure_columns("stock_counts", (("branch_id", "INTEGER"),))
+    ensure_columns("quotes", (("branch_id", "INTEGER"),))
     ensure_columns("employees", (("username", "TEXT"),))
     ensure_columns("shifts", (("employee_id", "INTEGER"),))
     ensure_columns(
@@ -1253,7 +1254,7 @@ def init_db():
     conn.execute("UPDATE branches SET is_default=1 WHERE name='الفرع الرئيسي' OR id=(SELECT MIN(id) FROM branches)")
     main_branch_id = conn.execute("SELECT id FROM branches WHERE is_default=1 ORDER BY id LIMIT 1").fetchone()[0]
     # Legacy rows are assigned to the default branch.
-    for table in ("users", "employees", "invoices", "shifts", "production_orders", "stock_moves", "stock_counts"):
+    for table in ("users", "employees", "invoices", "quotes", "shifts", "production_orders", "stock_moves", "stock_counts"):
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]:
             cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
             if "branch_id" in cols:
@@ -4412,8 +4413,8 @@ def quotes():
         total = round(subtotal - discount + tax, 2)
         number = next_number("QTE", "quotes")
         qid = execute(
-            """INSERT INTO quotes (number, date, customer_id, customer_name, subtotal, discount, tax, total, notes, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO quotes (number, date, customer_id, customer_name, subtotal, discount, tax, total, notes, created_by, branch_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 number,
                 date.today().isoformat(),
@@ -4425,6 +4426,7 @@ def quotes():
                 total,
                 request.form.get("notes"),
                 session.get("user"),
+                current_branch_id(),
             ),
         )
         for item in items:
@@ -4434,9 +4436,18 @@ def quotes():
             )
         flash("تم حفظ عرض السعر", "ok")
         return redirect(url_for("quotes"))
-    rows = query("SELECT * FROM quotes ORDER BY id DESC")
+    rows = query("SELECT * FROM quotes WHERE branch_id=? OR ? IS NULL ORDER BY id DESC", (current_branch_id(), current_branch_id()))
     customers = query("SELECT * FROM customers ORDER BY name")
-    return render_template("quotes.html", rows=rows, customers=customers, pay_methods=PAY_METHODS)
+    return render_template("quotes.html", rows=rows, customers=customers, pay_methods=PAY_METHODS, quote_form_only=False)
+
+
+@app.route("/quotes/new", methods=["GET", "POST"])
+@login_required
+def quote_new():
+    if request.method == "POST":
+        return quotes()
+    customers = query("SELECT * FROM customers ORDER BY name")
+    return render_template("quotes.html", rows=[], customers=customers, pay_methods=PAY_METHODS, quote_form_only=True)
 
 
 @app.route("/quotes/<int:qid>/invoice", methods=["POST"])

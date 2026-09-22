@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% set title = "عروض الأسعار" %}
+{% block actions %}
+{% if quote_form_only %}<a class="btn btn-ghost" href="{{ url_for('quotes') }}">قائمة عروض الأسعار</a>{% else %}<a class="btn btn-gold" href="{{ url_for('quote_new') }}">عرض سعر جديد</a>{% endif %}
+{% endblock %}
 {% block content %}
-<form method="post" id="inv-form" style="margin-bottom:16px">
+{% if quote_form_only %}<form method="post" action="{{ url_for('quote_new') }}" id="inv-form" style="margin-bottom:16px">
   <div class="panel" style="margin-bottom:14px">
     <div class="panel-h"><h3>عرض سعر جديد</h3></div>
     <div class="panel-b form-grid">
@@ -30,6 +33,7 @@
     </div>
   </div>
 </form>
+{% endif %}
 <template id="row-tpl">
   <tr>
     <td>
@@ -43,18 +47,18 @@
     <td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove()">حذف</button></td>
   </tr>
 </template>
-<div class="panel">
+{% if not quote_form_only %}<div class="panel">
   <div class="panel-h"><h3>العروض السابقة</h3></div>
   <div class="panel-b">
     <table>
-      <tr><th>رقم</th><th>العميل</th><th>التاريخ</th><th>الإجمالي</th><th>الحالة</th><th></th></tr>
+      <tr><th>رقم العرض</th><th>العميل</th><th>التاريخ</th><th>الإجمالي</th><th>الحالة</th><th>الإجراء</th></tr>
       {% for r in rows %}
       <tr>
         <td>{{ r.number }}</td>
         <td>{{ r.customer_name }}</td>
         <td>{{ r.date }}</td>
         <td class="money">{{ r.total|money }}</td>
-        <td><span class="badge b-open">{{ r.status }}</span></td>
+        <td><span class="badge {% if r.invoice_id or r.status == 'محوّل' %}b-paid{% else %}b-open{% endif %}">{{ 'منفذ' if r.invoice_id or r.status == 'محوّل' else 'غير منفذ' }}</span></td>
         <td>
           {% if not r.invoice_id %}
           <form method="post" action="{{ url_for('quote_to_invoice', qid=r.id) }}" style="margin:0">
@@ -69,5 +73,5 @@
       {% endfor %}
     </table>
   </div>
-</div>
+</div>{% endif %}
 {% endblock %}

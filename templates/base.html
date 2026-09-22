@@ -44,6 +44,7 @@
           {% if can('pos') %}<a href="{{ url_for('pos') }}">الكاشير وقراءة الباركود</a>{% endif %}
           {% if can('sales') %}<a href="{{ url_for('invoice_new', kind='sale') }}">فاتورة بيع جديدة</a><a href="{{ url_for('invoices_list', kind='sale') }}">فواتير البيع</a><a href="{{ url_for('invoices_list', kind='sale_return') }}">مرتجع البيع</a>{% endif %}
           {% if can('purchases') %}<a href="{{ url_for('invoice_new', kind='purchase') }}">فاتورة شراء جديدة</a><a href="{{ url_for('invoices_list', kind='purchase') }}">فواتير الشراء</a><a href="{{ url_for('invoices_list', kind='purchase_return') }}">مرتجع الشراء</a>{% endif %}
+          {% if can('quotes') %}<a href="{{ url_for('quote_new') }}">عرض سعر</a><a href="{{ url_for('quotes') }}">عروض الأسعار</a>{% endif %}
         </div></details>
         <details><summary>الأصناف والمخزون</summary><div class="menu-dropdown">
           {% if can('inventory') %}<a href="{{ url_for('inventory') }}">كارت الصنف</a><a href="{{ url_for('inventory_shortages') }}">النواقص وحد الطلب</a>{% endif %}

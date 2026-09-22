@@ -740,15 +740,13 @@ textarea { resize: vertical; }
   cursor: pointer; font-weight: 800; z-index: 2;
 }
 .sidebar-toggle:hover { background: #d4e5f2; }
-.classic-theme .sidebar.is-collapsed { width: 58px; }
-.classic-theme .sidebar.is-collapsed .brand { justify-content: center; padding: 8px 4px; }
+.classic-theme .sidebar.is-collapsed { width: 18px; padding: 0; overflow: visible; background: transparent; border-color: transparent; box-shadow: none; }
+.classic-theme .sidebar.is-collapsed .brand { display: none; }
 .classic-theme .sidebar.is-collapsed .brand > div,
 .classic-theme .sidebar.is-collapsed .quick-nav-title,
 .classic-theme .sidebar.is-collapsed .sidebar-footer { display: none; }
-.classic-theme .sidebar.is-collapsed .brand { margin-top: 34px; }
-.classic-theme .sidebar.is-collapsed .quick-nav a { justify-content: center; padding: 8px 4px; font-size: 0; }
-.classic-theme .sidebar.is-collapsed .quick-nav a span { flex: 0 0 22px; font-size: 12px; }
-.classic-theme .sidebar.is-collapsed .quick-nav-divider { margin: 10px 4px; }
+.classic-theme .sidebar.is-collapsed .quick-nav { display: none; }
+.classic-theme .sidebar.is-collapsed .sidebar-toggle { left: -5px; top: 18px; width: 28px; height: 34px; border-radius: 5px 0 0 5px; box-shadow: -2px 2px 7px rgba(14,39,64,.2); }
 @media (max-width: 700px) {
   .classic-theme .sidebar { right: 8px; top: 8px; bottom: 8px; }
   .classic-theme .main { padding-right: 8px; padding-left: 8px; }

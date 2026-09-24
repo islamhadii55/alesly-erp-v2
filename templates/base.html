@@ -47,7 +47,7 @@
           {% if can('quotes') %}<a href="{{ url_for('quote_new') }}">عرض سعر</a><a href="{{ url_for('quotes') }}">عروض الأسعار</a>{% endif %}
         </div></details>
         <details><summary>الأصناف والمخزون</summary><div class="menu-dropdown">
-          {% if can('inventory') %}<a href="{{ url_for('inventory') }}">كارت الصنف</a><a href="{{ url_for('inventory_shortages') }}">النواقص وحد الطلب</a>{% endif %}
+          {% if can('inventory') %}<a href="{{ url_for('inventory') }}">كارت الصنف</a><a href="{{ url_for('barcode_center') }}">مركز طباعة الباركود</a><a href="{{ url_for('inventory_shortages') }}">النواقص وحد الطلب</a>{% endif %}
           {% if can('manufacturing') %}<a href="{{ url_for('manufacturing') }}">التصنيع وأوامر الإنتاج</a>{% endif %}
           {% if can('parties') %}<a href="{{ url_for('customers') }}">العملاء</a><a href="{{ url_for('suppliers') }}">الموردون</a>{% endif %}{% if can('jobs') %}<a href="{{ url_for('jobs') }}">أوامر الشغل والصيانة</a>{% endif %}
         </div></details>

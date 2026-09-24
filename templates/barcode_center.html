@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set title = "مركز طباعة الباركود" %}
+{% block content %}
+<div class="panel">
+  <div class="panel-h">
+    <h3>مركز طباعة الباركود</h3>
+    <a class="btn btn-ghost" href="{{ url_for('inventory') }}">العودة للمخزون</a>
+  </div>
+  <div class="panel-b">
+    <p class="muted">حدد الأصناف المطلوبة، ثم اكتب عدد الملصقات لكل صنف. سيتم إنشاء ملف PDF منسق للطباعة.</p>
+    <form method="post">
+      <div class="actions" style="margin-bottom:12px;gap:8px">
+        <button class="btn btn-gold" type="submit">إنشاء ملف PDF</button>
+        <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=true)">تحديد الكل</button>
+        <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=false)">إلغاء التحديد</button>
+      </div>
+      <table class="inv-table">
+        <thead><tr><th>اختيار</th><th>الصنف</th><th>الكود</th><th>الباركود</th><th>الرصيد</th><th>عدد الملصقات</th></tr></thead>
+        <tbody>
+        {% for p in products %}
+          <tr>
+            <td><input type="checkbox" name="product_ids" value="{{ p.id }}"></td>
+            <td>{{ p.name }}</td>
+            <td>{{ p.sku }}</td>
+            <td>{{ p.barcode or p.sku }}</td>
+            <td>{{ p.qty }}</td>
+            <td><input type="number" name="{{ p.id }}" value="1" min="1" max="500" style="width:90px"></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="muted">لا توجد أصناف قابلة للطباعة.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </form>
+  </div>
+</div>
+{% endblock %}

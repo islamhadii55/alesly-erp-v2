@@ -10,6 +10,7 @@
   <div class="panel-b">
     <div class="actions" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">
       <a class="btn" href="{{ url_for('inventory_export', q=q or None) }}">تصدير إلى Excel</a>
+      <a class="btn btn-gold" href="{{ url_for('barcode_center') }}">مركز طباعة الباركود</a>
       <a class="btn btn-ghost" href="{{ url_for('inventory_template') }}">تنزيل قالب Excel</a>
       <button class="btn btn-ghost" type="button" onclick="document.getElementById('import-box').style.display=(document.getElementById('import-box').style.display==='none'?'block':'none')">استيراد من Excel</button>
     </div>
@@ -64,10 +65,12 @@
       <div class="field"><label>سعر البيع</label><input name="price" type="number" step="0.01" value="{{ edit.price if edit else 0 }}"></div>
       <div class="field"><label>الكمية</label><input name="qty" type="number" step="0.01" value="{{ edit.qty if edit else 0 }}"></div>
       <div class="field"><label>حد إعادة الطلب</label><input name="min_qty" type="number" step="0.01" value="{{ edit.min_qty if edit else 2 }}"></div>
+      <div class="field full"><label>مكان الصنف داخل المخزن</label><small class="muted">حدد مكان الصنف هنا ضمن إعداداته؛ سيظهر في البحث وكارت الصنف.</small></div>
       <div class="field"><label>المخزن</label><input name="warehouse" value="{{ edit.warehouse if edit else '' }}" data-suggest="warehouse" autocomplete="off" placeholder="الرئيسي / الفرعي"></div>
       <div class="field"><label>الممر</label><input name="aisle" value="{{ edit.aisle if edit else '' }}" data-suggest="aisle" autocomplete="off" placeholder="A / 1"></div>
       <div class="field"><label>الرف</label><input name="shelf" value="{{ edit.shelf if edit else '' }}" data-suggest="shelf" autocomplete="off" placeholder="3"></div>
       <div class="field"><label>الموضع بالضبط</label><input name="bin" value="{{ edit.bin if edit else '' }}" data-suggest="bin" autocomplete="off" placeholder="يسار / رقم الخانة"></div>
+      <div class="field full"><label>الوصف الكامل للموقع</label><input name="location" value="{{ edit.location if edit else '' }}" placeholder="يُبنى تلقائيًا من المخزن والممر والرف والموضع"></div>
       <div class="field full"><label>ملاحظات</label><input name="notes" value="{{ edit.notes if edit else '' }}"></div>
       <div class="actions"><button class="btn btn-gold">حفظ الصنف</button>{% if edit %}<a class="btn btn-ghost" href="{{ url_for('inventory') }}">إلغاء</a>{% endif %}</div>
     </form>
@@ -124,6 +127,9 @@
                 </a>
                 <a class="act act-menu" href="{{ url_for('inventory', q=r.sku) }}" title="عرض الصنف فقط">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </a>
+                <a class="act act-grid" href="{{ url_for('product_barcode_pdf', pid=r.id) }}" title="طباعة باركود الصنف">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5M4 4h5M20 4h-5M20 4v5M4 20v-5M4 20h5M20 20h-5M20 20v-5"/><path d="M8 8h2v8H8zM12 8h1v8h-1zM15 8h2v8h-2z"/></svg>
                 </a>
                 <a class="act act-del" href="{{ url_for('delete_product', pid=r.id) }}" onclick="return confirm('حذف الصنف؟')" title="حذف الصنف">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>

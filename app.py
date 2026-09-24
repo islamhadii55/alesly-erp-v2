@@ -28,12 +28,16 @@ try:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as PdfImage
+    from reportlab.graphics.barcode import code128
+    from reportlab.graphics.shapes import Drawing
     import arabic_reshaper
     from bidi.algorithm import get_display
     pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
     REPORTLAB_OK = True
 except Exception:
     REPORTLAB_OK = False
+    code128 = None
+    Drawing = None
 
 
 def rtl_pdf(value):
@@ -141,6 +145,8 @@ ENDPOINT_PERMISSIONS = {
     "inventory_count": "inventory",
     "inventory_serial": "inventory",
     "inventory_shortages": "inventory",
+    "barcode_center": "inventory",
+    "product_barcode_pdf": "inventory",
     "manufacturing": "manufacturing",
     "manufacturing_material_delete": "manufacturing",
     "manufacturing_start": "manufacturing",
@@ -966,6 +972,19 @@ def init_db():
             status TEXT NOT NULL DEFAULT 'نشط',
             UNIQUE(user_id, branch_id)
         );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            full_name TEXT,
+            branch_id INTEGER,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER,
+            entity_ref TEXT,
+            details TEXT,
+            ip_address TEXT,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS installments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             customer_id INTEGER NOT NULL,
@@ -1624,6 +1643,7 @@ def save_invoice(kind, form, related_id=None):
                    VALUES (?,?,?,?,?,'مستحق')""",
                 (party_id, inv_id, n, due_d, amt),
             )
+    audit_log("إنشاء", "فاتورة", inv_id, number, f"نوع المستند: {KIND_LABELS.get(kind, kind)}، الإجمالي: {total:,.2f}")
     return inv_id
 
 
@@ -1696,6 +1716,7 @@ def cancel_invoice(inv_id):
         if pts:
             execute("UPDATE customers SET points = MAX(COALESCE(points,0) - ?, 0) WHERE id=?", (pts, party_id))
     execute("UPDATE invoices SET status='ملغاة', notes=COALESCE(notes,'') || ? WHERE id=?", (f" | أُلغي بواسطة {session.get('user')}", inv_id))
+    audit_log("إلغاء", "فاتورة", inv_id, number, f"إلغاء {KIND_LABELS.get(kind, kind)}")
     add_journal(f"إلغاء {number}", "إلغاء مستندات", debit=0, credit=0, reference_type="invoice_cancel", reference_id=inv_id)
     return inv
 
@@ -1838,6 +1859,20 @@ def current_branch_id():
     branch = current_branch()
     return branch["id"] if branch else None
 
+
+def audit_log(action, entity_type, entity_id=None, entity_ref=None, details=""):
+    if not session.get("user"):
+        return
+    execute(
+        """INSERT INTO audit_log (username, full_name, branch_id, action, entity_type, entity_id, entity_ref, details, ip_address, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            session.get("user"), session.get("full_name"), current_branch_id(), action,
+            entity_type, entity_id, entity_ref, details, request.remote_addr if request else "",
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+
 def has_table_column(table, column):
     try:
         return any(r[1] == column for r in db().execute(f"PRAGMA table_info({table})").fetchall())
@@ -1872,7 +1907,8 @@ def current_employee(username=None):
     username = username or session.get("user")
     if not username:
         return None
-    return query("SELECT * FROM employees WHERE username=? AND status='نشط'", (username,), one=True)
+    extra, extra_args = branch_filter("employees")
+    return query("SELECT * FROM employees WHERE username=? AND status='نشط'" + extra, [username] + extra_args, one=True)
 
 
 def attendance_preview(employee_id, period):
@@ -2662,13 +2698,15 @@ def save_product_from_form():
                    barcode=?, year_from=?, year_to=?, notes=?, item_type=?, base_unit=?, serial_tracking=? WHERE id=?""",
                 data + (pid,),
             )
+            audit_log("تعديل", "صنف", pid, sku, f"تعديل بيانات الصنف والموقع: {location or 'غير محدد'}")
             flash("تم تحديث الصنف", "ok")
         else:
-            execute(
+            new_id = execute(
                 """INSERT INTO products (sku, name, category, brand, car_model, unit, cost, price, qty, min_qty, location, warehouse, aisle, shelf, bin, barcode, year_from, year_to, notes, item_type, base_unit, serial_tracking)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 data,
             )
+            audit_log("إنشاء", "صنف", new_id, sku, f"إضافة الصنف وموقعه: {location or 'غير محدد'}")
             flash(f"تم إضافة الصنف بالكود {sku}", "ok")
     except sqlite3.IntegrityError:
         flash("رقم الصنف موجود مسبقاً", "err")
@@ -2686,8 +2724,16 @@ def products():
 @app.route("/products/delete/<int:pid>")
 @login_required
 def delete_product(pid):
-    execute("DELETE FROM products WHERE id=?", (pid,))
-    flash("تم حذف الصنف", "ok")
+    product = query("SELECT name, sku FROM products WHERE id=?", (pid,), one=True)
+    if not product:
+        flash("الصنف غير موجود", "err")
+        return redirect(url_for("inventory"))
+    try:
+        execute("DELETE FROM products WHERE id=?", (pid,))
+        audit_log("حذف", "صنف", pid, product["sku"], f"حذف الصنف: {product['name']}")
+        flash("تم حذف الصنف", "ok")
+    except sqlite3.IntegrityError:
+        flash("لا يمكن حذف الصنف لأنه مرتبط بحركات أو فواتير؛ استخدم تعديلًا أو اجعله غير نشط", "err")
     return redirect(url_for("inventory"))
 
 
@@ -2752,6 +2798,58 @@ def inventory():
         counts=counts,
         stats=stats,
     )
+
+
+def barcode_pdf_response(products, quantities):
+    if not REPORTLAB_OK or code128 is None:
+        flash("طباعة الباركود غير متاحة حاليًا على الخادم", "err")
+        return redirect(url_for("barcode_center"))
+    stream = io.BytesIO()
+    doc = SimpleDocTemplate(stream, pagesize=A4, rightMargin=24, leftMargin=24, topMargin=24, bottomMargin=24)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="BarcodeArabic", fontName="DejaVu", fontSize=8, leading=10, alignment=TA_RIGHT))
+    cells = []
+    for product in products:
+        value = str(product["barcode"] or product["sku"] or product["id"]).strip()
+        count = max(1, min(int(quantities.get(str(product["id"]), 1) or 1), 500))
+        for _ in range(count):
+            bc = code128.Code128(value, barHeight=28, barWidth=0.75)
+            cells.append([bc, Paragraph(rtl_pdf(product["name"]), styles["BarcodeArabic"]), Paragraph(rtl_pdf(value), styles["BarcodeArabic"])])
+    if not cells:
+        flash("اختر صنفًا واحدًا على الأقل", "err")
+        return redirect(url_for("barcode_center"))
+    rows = []
+    for i in range(0, len(cells), 2):
+        row = []
+        for cell in cells[i:i + 2]:
+            row.append(Table([cell], colWidths=[250], rowHeights=[62], style=TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#ccd6df"))])))
+        if len(row) == 1:
+            row.append("")
+        rows.append(row)
+    doc.build([Paragraph(rtl_pdf("مركز طباعة باركود الأصناف"), styles["Title"]), Spacer(1, 12), Table(rows, colWidths=[260, 260], hAlign="CENTER")])
+    stream.seek(0)
+    return send_file(stream, as_attachment=True, download_name="barcodes.pdf", mimetype="application/pdf")
+
+
+@app.route("/inventory/barcodes", methods=["GET", "POST"])
+@login_required
+def barcode_center():
+    if request.method == "POST":
+        ids = [int(x) for x in request.form.getlist("product_ids") if str(x).isdigit()]
+        products = query("SELECT id,name,sku,barcode FROM products WHERE id IN (%s) ORDER BY name" % ",".join("?" * len(ids)), ids) if ids else []
+        return barcode_pdf_response(products, request.form)
+    products = query("SELECT id,name,sku,barcode,qty FROM products WHERE item_type IS NULL OR item_type!='خدمة' ORDER BY name")
+    return render_template("barcode_center.html", products=products)
+
+
+@app.route("/inventory/<int:pid>/barcode.pdf")
+@login_required
+def product_barcode_pdf(pid):
+    product = query("SELECT id,name,sku,barcode FROM products WHERE id=?", (pid,), one=True)
+    if not product:
+        flash("الصنف غير موجود", "err")
+        return redirect(url_for("inventory"))
+    return barcode_pdf_response([product], {str(pid): request.args.get("qty", "1")})
 
 
 @app.route("/inventory/shortages")
@@ -3755,18 +3853,25 @@ def advances():
 def attendance():
     if request.method == "POST":
         employee_id = int(request.form["employee_id"])
+        emp_branch_sql, emp_branch_args = branch_filter("employees")
+        employee = query("SELECT id FROM employees WHERE id=?" + emp_branch_sql, [employee_id] + emp_branch_args, one=True)
+        if not employee:
+            flash("لا يمكن تسجيل حضور موظف خارج الفرع الحالي", "err")
+            return redirect(url_for("attendance"))
         day = request.form.get("attendance_date") or date.today().isoformat()
         existing = query("SELECT id FROM attendance WHERE employee_id=? AND attendance_date=?", (employee_id, day), one=True)
         if existing:
             execute("UPDATE attendance SET status='غائب', notes=? WHERE id=?", (request.form.get("notes"), existing["id"]))
         else:
             execute("INSERT INTO attendance (employee_id, attendance_date, status, notes) VALUES (?,?,?,?)", (employee_id, day, "غائب", request.form.get("notes")))
+        audit_log("تسجيل غياب", "حضور", employee_id, day, request.form.get("notes") or "")
         flash("تم تسجيل الغياب، وسيظهر الخصم للمراجعة في كشف الراتب", "ok")
         return redirect(url_for("attendance"))
     period = request.args.get("period") or date.today().strftime("%Y-%m")
+    emp_branch_sql, emp_branch_args = branch_filter("e")
     rows = query("""SELECT a.*, e.name, e.salary FROM attendance a JOIN employees e ON e.id=a.employee_id
-                    WHERE a.attendance_date LIKE ? ORDER BY a.attendance_date DESC, e.name""", (period + "%",))
-    emps = query("SELECT * FROM employees WHERE status='نشط' ORDER BY name")
+                    WHERE a.attendance_date LIKE ?""" + emp_branch_sql + " ORDER BY a.attendance_date DESC, e.name", [period + "%"] + emp_branch_args)
+    emps = query("SELECT * FROM employees WHERE status='نشط'" + emp_branch_sql.replace("e.", "") + " ORDER BY name", emp_branch_args)
     return render_template("attendance.html", rows=rows, emps=emps, period=period)
 
 
@@ -4463,6 +4568,7 @@ def shift_open():
                VALUES (?,?,?,?,?,?)""",
             (employee["id"], today, shift_id, "حاضر", started.strftime("%Y-%m-%d %H:%M"), late_minutes),
         )
+    audit_log("بدء وردية", "وردية", shift_id, str(shift_id), f"الموظف: {employee['name']}، التأخير: {late_minutes} دقيقة")
     flash("تم فتح الوردية", "ok")
     return redirect(request.referrer or url_for("pos"))
 
@@ -4500,6 +4606,7 @@ def shift_close():
             request.form.get("notes"),
         ),
     )
+    audit_log("إنهاء وردية", "وردية", sh["id"], str(sh["id"]), f"الفرق النقدي: {round(actual - expected, 2):,.2f}")
     flash(f"أُغلقت الوردية. الفرق {round(actual - expected, 2):,.2f}", "ok")
     return redirect(url_for("treasury"))
 
@@ -4683,6 +4790,7 @@ def quotes():
                 "INSERT INTO quote_items (quote_id, product_id, description, qty, unit_price, line_total) VALUES (?,?,?,?,?,?)",
                 (qid, item["product_id"], item["description"], item["qty"], item["unit_price"], item["line_total"]),
             )
+        audit_log("إنشاء", "عرض سعر", qid, number, f"العميل: {request.form.get('party_name') or request.form.get('party_search') or 'عميل'}، الإجمالي: {total:,.2f}")
         flash("تم حفظ عرض السعر", "ok")
         return redirect(url_for("quotes"))
     rows = query("SELECT * FROM quotes WHERE branch_id=? OR ? IS NULL ORDER BY id DESC", (current_branch_id(), current_branch_id()))
@@ -4724,6 +4832,7 @@ def quote_to_invoice(qid):
     try:
         inv_id = save_invoice("sale", form, related_id=qid)
         execute("UPDATE quotes SET status=?, invoice_id=? WHERE id=?", ("محوّل", inv_id, qid))
+        audit_log("تحويل إلى فاتورة", "عرض سعر", qid, quote["number"], f"رقم الفاتورة الناتجة: {query('SELECT number FROM invoices WHERE id=?', (inv_id,), one=True)['number']}")
         flash("تم تحويل العرض إلى فاتورة", "ok")
         return redirect(url_for("invoice_view", inv_id=inv_id))
     except Exception as exc:

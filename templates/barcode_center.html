@@ -16,11 +16,13 @@
       <button class="btn btn-ghost" type="submit">بحث</button>
       {% if q %}<a class="btn btn-ghost" href="{{ url_for('barcode_center') }}">مسح البحث</a>{% endif %}
     </form>
-    <form method="post">
+    <form method="post" id="barcode-print-form">
+      <input type="hidden" name="search_q" value="{{ q or '' }}">
       <div class="actions" style="margin-bottom:12px;gap:8px">
-        <button class="btn btn-gold" type="submit">إنشاء ملف PDF</button>
-        <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=true)">تحديد الكل</button>
-        <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=false)">إلغاء التحديد</button>
+        <button class="btn btn-gold" type="submit">طباعة الباركود المحدد PDF</button>
+        <button class="btn btn-ghost" type="button" id="barcode-select-all">تحديد نتائج البحث</button>
+        <button class="btn btn-ghost" type="button" id="barcode-clear-selection">إلغاء التحديد</button>
+        <span class="badge b-paid" id="barcode-selected-count">0 صنف محدد</span>
       </div>
       <table class="inv-table">
         <thead><tr><th>اختيار</th><th>الصنف</th><th>الكود</th><th>الباركود</th><th>الرصيد</th><th>عدد الملصقات</th></tr></thead>
@@ -42,4 +44,27 @@
     </form>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const form = document.getElementById('barcode-print-form');
+  if (!form) return;
+  const checks = () => Array.from(form.querySelectorAll('input[name="product_ids"]'));
+  const count = () => {
+    const n = checks().filter(x => x.checked).length;
+    document.getElementById('barcode-selected-count').textContent = n + ' صنف محدد';
+  };
+  document.getElementById('barcode-select-all').addEventListener('click', () => { checks().forEach(x => x.checked = true); count(); });
+  document.getElementById('barcode-clear-selection').addEventListener('click', () => { checks().forEach(x => x.checked = false); count(); });
+  checks().forEach(x => x.addEventListener('change', count));
+  form.addEventListener('submit', (event) => {
+    if (!checks().some(x => x.checked)) {
+      event.preventDefault();
+      alert('حدد صنفًا واحدًا على الأقل من نتائج البحث للطباعة.');
+    }
+  });
+  count();
+})();
+</script>
 {% endblock %}

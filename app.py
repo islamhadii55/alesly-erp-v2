@@ -2837,6 +2837,8 @@ def barcode_center():
     if request.method == "POST":
         ids = [int(x) for x in request.form.getlist("product_ids") if str(x).isdigit()]
         products = query("SELECT id,name,sku,barcode FROM products WHERE id IN (%s) ORDER BY name" % ",".join("?" * len(ids)), ids) if ids else []
+        if products:
+            audit_log("طباعة مجمعة", "باركود", None, ",".join(str(p["sku"]) for p in products), f"طباعة باركود {len(products)} صنف/أصناف بعد البحث: {request.form.get('search_q') or 'بدون بحث'}")
         return barcode_pdf_response(products, request.form)
     q = (request.args.get("q") or "").strip()
     sql = "SELECT id,name,sku,barcode,qty FROM products WHERE (item_type IS NULL OR item_type!='خدمة')"

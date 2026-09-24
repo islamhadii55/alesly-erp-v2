@@ -8,6 +8,14 @@
   </div>
   <div class="panel-b">
     <p class="muted">حدد الأصناف المطلوبة، ثم اكتب عدد الملصقات لكل صنف. سيتم إنشاء ملف PDF منسق للطباعة.</p>
+    <form method="get" class="actions" style="margin-bottom:14px;gap:8px;align-items:end">
+      <div class="field" style="flex:1;min-width:240px">
+        <label for="barcode-search">بحث عن الصنف</label>
+        <input id="barcode-search" name="q" value="{{ q or '' }}" placeholder="ابحث بالاسم أو كود الصنف أو الباركود أو المكان" autocomplete="off">
+      </div>
+      <button class="btn btn-ghost" type="submit">بحث</button>
+      {% if q %}<a class="btn btn-ghost" href="{{ url_for('barcode_center') }}">مسح البحث</a>{% endif %}
+    </form>
     <form method="post">
       <div class="actions" style="margin-bottom:12px;gap:8px">
         <button class="btn btn-gold" type="submit">إنشاء ملف PDF</button>
@@ -27,7 +35,7 @@
             <td><input type="number" name="{{ p.id }}" value="1" min="1" max="500" style="width:90px"></td>
           </tr>
         {% else %}
-          <tr><td colspan="6" class="muted">لا توجد أصناف قابلة للطباعة.</td></tr>
+          <tr><td colspan="6" class="muted">{% if q %}لا توجد نتائج مطابقة للبحث «{{ q }}».{% else %}لا توجد أصناف قابلة للطباعة.{% endif %}</td></tr>
         {% endfor %}
         </tbody>
       </table>

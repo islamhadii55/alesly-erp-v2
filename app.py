@@ -2838,8 +2838,14 @@ def barcode_center():
         ids = [int(x) for x in request.form.getlist("product_ids") if str(x).isdigit()]
         products = query("SELECT id,name,sku,barcode FROM products WHERE id IN (%s) ORDER BY name" % ",".join("?" * len(ids)), ids) if ids else []
         return barcode_pdf_response(products, request.form)
-    products = query("SELECT id,name,sku,barcode,qty FROM products WHERE item_type IS NULL OR item_type!='خدمة' ORDER BY name")
-    return render_template("barcode_center.html", products=products)
+    q = (request.args.get("q") or "").strip()
+    sql = "SELECT id,name,sku,barcode,qty FROM products WHERE (item_type IS NULL OR item_type!='خدمة')"
+    args = []
+    if q:
+        sql += " AND (name LIKE ? OR sku LIKE ? OR IFNULL(barcode,'') LIKE ? OR IFNULL(brand,'') LIKE ? OR IFNULL(location,'') LIKE ?)"
+        args.extend([f"%{q}%"] * 5)
+    products = query(sql + " ORDER BY name", args)
+    return render_template("barcode_center.html", products=products, q=q)
 
 
 @app.route("/inventory/<int:pid>/barcode.pdf")

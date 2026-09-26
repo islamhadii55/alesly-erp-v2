@@ -62,6 +62,16 @@
     <div class="panel-b"><table><tr><th>#</th><th>المهمة</th><th>الطابعة</th><th>الحالة</th><th>التاريخ</th></tr>{% for j in jobs %}<tr><td>{{ j.id }}</td><td>{{ j.job_type }}</td><td>{{ j.printer_name or '—' }}</td><td><span class="badge {% if j.status=='completed' %}b-paid{% elif j.status=='failed' %}b-void{% else %}b-open{% endif %}">{{ j.status }}</span></td><td>{{ j.created_at }}</td></tr>{% else %}<tr><td colspan="5" class="muted">لا توجد مهام.</td></tr>{% endfor %}</table></div>
   </div>
 </div>
+<div class="split" style="margin-top:14px">
+  <div class="panel">
+    <div class="panel-h"><h3>تقرير أخطاء مهام الطباعة</h3><span class="badge b-void">{{ failed_jobs|length }} فشل</span></div>
+    <div class="panel-b"><table><tr><th>#</th><th>المهمة</th><th>الطابعة</th><th>المحاولات</th><th>الخطأ</th><th>آخر تحديث</th></tr>{% for j in failed_jobs %}<tr><td>{{ j.id }}</td><td>{{ j.job_type }}</td><td>{{ j.printer_name or '—' }}</td><td>{{ j.attempts }}</td><td class="down" style="white-space:normal;min-width:220px">{{ j.error_message or '—' }}</td><td>{{ j.updated_at }}</td></tr>{% else %}<tr><td colspan="6" class="muted">لا توجد مهام فاشلة.</td></tr>{% endfor %}</table></div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>انقطاعات الاتصال</h3><span class="badge b-void">{{ connection_failures|length }} حالة</span></div>
+    <div class="panel-b"><table><tr><th>الطابعة</th><th>الوصول</th><th>الاستجابة</th><th>الخطأ</th><th>التاريخ</th></tr>{% for h in connection_failures %}<tr><td>{{ h.printer_name }}</td><td class="down">غير متاح</td><td>{{ h.response_ms or '—' }} ms</td><td style="white-space:normal">{{ h.error_message or '—' }}</td><td>{{ h.checked_at }}</td></tr>{% else %}<tr><td colspan="5" class="muted">لا توجد حالات انقطاع مسجلة.</td></tr>{% endfor %}</table></div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>

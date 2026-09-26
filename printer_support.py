@@ -282,6 +282,19 @@ def register_printer_api(
                         JOIN printer_profiles pp ON pp.id=p.profile_id ORDER BY pa.job_type, pa.priority""")
         return jsonify({"ok": True, "assignments": _rows(rows)})
 
+    @app.get("/api/print-errors")
+    @login_required
+    def api_print_errors():
+        jobs = query("""SELECT pj.id, pj.job_type, pj.status, pj.attempts, pj.error_message,
+                               pj.updated_at, p.name printer_name, p.address, p.port
+                        FROM print_jobs pj LEFT JOIN printers p ON p.id=pj.printer_id
+                        WHERE pj.status='failed' OR (pj.status='printing' AND pj.error_message IS NOT NULL)
+                        ORDER BY pj.updated_at DESC LIMIT 100""")
+        health = query("""SELECT h.*, p.name printer_name, p.address, p.port
+                          FROM printer_health_checks h JOIN printers p ON p.id=h.printer_id
+                          WHERE h.is_reachable=0 ORDER BY h.checked_at DESC LIMIT 100""")
+        return jsonify({"ok": True, "failed_jobs": _rows(jobs), "connection_failures": _rows(health)})
+
     @app.get("/printers")
     @admin_required
     def printer_management():
@@ -298,6 +311,13 @@ def register_printer_api(
             jobs=_rows(query("""SELECT pj.*, p.name printer_name, p.code printer_code
                               FROM print_jobs pj LEFT JOIN printers p ON p.id=pj.printer_id
                               ORDER BY pj.id DESC LIMIT 30""")),
+            failed_jobs=_rows(query("""SELECT pj.*, p.name printer_name, p.address, p.port
+                                     FROM print_jobs pj LEFT JOIN printers p ON p.id=pj.printer_id
+                                     WHERE pj.status='failed' OR (pj.status='printing' AND pj.error_message IS NOT NULL)
+                                     ORDER BY pj.updated_at DESC LIMIT 30""")),
+            connection_failures=_rows(query("""SELECT h.*, p.name printer_name
+                                              FROM printer_health_checks h JOIN printers p ON p.id=h.printer_id
+                                              WHERE h.is_reachable=0 ORDER BY h.checked_at DESC LIMIT 30""")),
         )
 
     def select_printer(job_type: str, branch_id: Any = None, workstation_id: Any = None, explicit_id: Any = None):

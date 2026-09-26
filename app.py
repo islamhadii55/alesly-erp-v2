@@ -11,6 +11,7 @@ from flask import (
     session, flash, jsonify, send_from_directory, make_response, send_file
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
+from printer_support import install_printer_schema, register_printer_api
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -546,6 +547,7 @@ def seed_demo_documents(conn):
 
 def init_db():
     conn = connect_sqlite()
+    install_printer_schema(conn)
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -5464,6 +5466,7 @@ def sync_center():
     return render_template("sync.html", pending=pending, failed=failed, logs=logs, queue=queue, devices=devices)
 
 
+register_printer_api(app, query, execute, connect_sqlite, login_required, admin_required)
 init_db()
 
 if __name__ == "__main__":

@@ -121,6 +121,9 @@
           </select>
         </div>
         <div class="field" style="margin-bottom:10px"><label>عدد النسخ</label><input type="number" min="1" name="print_copies" value="{{ settings.get('print_copies','1') }}"></div>
+        <label style="display:flex;gap:8px;align-items:center;margin:8px 0">
+          <input type="checkbox" name="auto_barcode_print" {% if settings.get('auto_barcode_print','1')=='1' %}checked{% endif %}> طباعة ملصق الباركود تلقائيًا عند إضافة منتج
+        </label>
         <div class="field" style="margin-bottom:10px"><label>بادئة كود الصنف التلقائي</label><input name="sku_prefix" value="{{ settings.get('sku_prefix','PRD') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>نسبة الضريبة %</label><input name="vat_rate" value="{{ settings.get('vat_rate','15') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>نقاط الولاء لكل 100</label><input name="points_per_100" value="{{ settings.get('points_per_100','1') }}"></div>

@@ -11,7 +11,7 @@ from flask import (
     session, flash, jsonify, send_from_directory, make_response, send_file
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
-from printer_support import install_printer_schema, register_printer_api
+from printer_support import install_printer_schema, queue_auto_barcode_job, register_printer_api
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -2709,6 +2709,10 @@ def save_product_from_form():
                 data,
             )
             audit_log("إنشاء", "صنف", new_id, sku, f"إضافة الصنف وموقعه: {location or 'غير محدد'}")
+            if get_setting("auto_barcode_print", "1") == "1":
+                queued_job_id = queue_auto_barcode_job(query, execute, new_id, current_branch_id())
+                if queued_job_id:
+                    flash("تمت إضافة ملصق الباركود إلى طابور الطباعة تلقائيًا", "ok")
             flash(f"تم إضافة الصنف بالكود {sku}", "ok")
     except sqlite3.IntegrityError:
         flash("رقم الصنف موجود مسبقاً", "err")
@@ -3584,6 +3588,7 @@ def settings():
                 "print_footer",
                 "paper_size",
                 "print_copies",
+                "auto_barcode_print",
                 "sku_prefix",
                 "vat_rate",
                 "points_per_100",
@@ -3616,6 +3621,10 @@ def settings():
             execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 ("show_profit", "1" if request.form.get("show_profit") else "0"),
+            )
+            execute(
+                "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                ("auto_barcode_print", "1" if request.form.get("auto_barcode_print") else "0"),
             )
             execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",

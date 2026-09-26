@@ -8,7 +8,8 @@ import uuid
 from datetime import datetime
 from typing import Any, Callable
 
-from flask import jsonify, request, session
+from flask import jsonify, render_template, request, session
+from printer_adapters import ThermalTCPAdapter
 
 NOW = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -135,6 +136,23 @@ def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 def _rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     return [_row(row) for row in rows]
+
+
+def queue_auto_barcode_job(query: Callable[..., Any], execute: Callable[..., Any], product_id: int, branch_id: Any = None) -> int | None:
+    """Queue one label for a newly created product when a compatible printer exists."""
+    product = query("SELECT id,name,sku,barcode FROM products WHERE id=?", (product_id,), one=True)
+    printer = query("""SELECT p.id, pp.payload_format FROM printers p JOIN printer_profiles pp ON pp.id=p.profile_id
+                      WHERE p.enabled=1 AND p.status='active' AND pp.kind IN ('barcode','thermal')
+                      ORDER BY p.is_default DESC, p.id ASC LIMIT 1""", one=True)
+    if not product or not printer:
+        return None
+    value = str(product["barcode"] or product["sku"] or product["id"])
+    key = f"product-barcode:{product_id}:{value}"
+    existing = query("SELECT id FROM print_jobs WHERE idempotency_key=?", (key,), one=True)
+    if existing:
+        return existing["id"]
+    return execute("""INSERT INTO print_jobs(printer_id,job_type,status,payload_format,payload,copies,idempotency_key,source_type,source_id,branch_id,queued_at,created_at,updated_at)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (printer["id"], "barcode_label", "queued", printer["payload_format"], json.dumps({"product_id": product["id"], "product_name": product["name"], "value": value}, ensure_ascii=False), 1, key, "product", str(product_id), branch_id, NOW(), NOW(), NOW()))
 
 
 def register_printer_api(
@@ -264,6 +282,24 @@ def register_printer_api(
                         JOIN printer_profiles pp ON pp.id=p.profile_id ORDER BY pa.job_type, pa.priority""")
         return jsonify({"ok": True, "assignments": _rows(rows)})
 
+    @app.get("/printers")
+    @admin_required
+    def printer_management():
+        return render_template(
+            "printers.html",
+            profiles=_rows(query("SELECT * FROM printer_profiles ORDER BY kind, name")),
+            printers=_rows(query("""SELECT p.*, pp.name profile_name, pp.kind, pp.payload_format
+                                   FROM printers p JOIN printer_profiles pp ON pp.id=p.profile_id
+                                   ORDER BY pp.kind, p.name""")),
+            assignments=_rows(query("""SELECT pa.*, p.name printer_name, p.code printer_code, pp.kind
+                                     FROM printer_assignments pa JOIN printers p ON p.id=pa.printer_id
+                                     JOIN printer_profiles pp ON pp.id=p.profile_id
+                                     ORDER BY pa.job_type, pa.priority""")),
+            jobs=_rows(query("""SELECT pj.*, p.name printer_name, p.code printer_code
+                              FROM print_jobs pj LEFT JOIN printers p ON p.id=pj.printer_id
+                              ORDER BY pj.id DESC LIMIT 30""")),
+        )
+
     def select_printer(job_type: str, branch_id: Any = None, workstation_id: Any = None, explicit_id: Any = None):
         if explicit_id:
             row = query("SELECT p.*, pp.kind, pp.payload_format FROM printers p JOIN printer_profiles pp ON pp.id=p.profile_id WHERE p.id=? AND p.enabled=1 AND p.status='active'", (explicit_id,), one=True)
@@ -319,9 +355,19 @@ def register_printer_api(
         execute("UPDATE print_jobs SET status='cancelled', updated_at=? WHERE id=? AND status='queued'", (NOW(), job_id))
         return jsonify({"ok": True})
 
+    @app.post("/api/printers/<int:printer_id>/test")
     @app.post("/api/printers/<int:printer_id>/health")
     @login_required
     def api_printer_health(printer_id: int):
-        # Actual TCP/USB probing belongs to the deployment-specific adapter.
-        execute("INSERT INTO printer_health_checks(printer_id,is_reachable,error_message,checked_at) VALUES (?,?,?,?)", (printer_id, 0, "adapter_not_configured", NOW()))
-        return jsonify({"ok": True, "reachable": False, "error": "adapter_not_configured"})
+        printer = query("""SELECT p.*, pp.kind, pp.driver_options, pp.payload_format
+                           FROM printers p JOIN printer_profiles pp ON pp.id=p.profile_id
+                           WHERE p.id=?""", (printer_id,), one=True)
+        if not printer:
+            return jsonify({"ok": False, "error": "الطابعة غير موجودة"}), 404
+        if printer["connection"] != "network" or printer["kind"] != "thermal":
+            result = {"reachable": False, "error": "adapter_not_configured_for_connection"}
+        else:
+            result = ThermalTCPAdapter().test_connection({"address": printer["address"], "port": printer["port"], "driver_options": _json(printer["driver_options"])})
+        execute("INSERT INTO printer_health_checks(printer_id,is_reachable,response_ms,error_message,checked_at) VALUES (?,?,?,?,?)", (printer_id, int(result.get("reachable", False)), result.get("response_ms"), result.get("error"), NOW()))
+        execute("UPDATE printers SET status=?, last_seen_at=?, last_error=?, updated_at=? WHERE id=?", ("active" if result.get("reachable") else "error", NOW() if result.get("reachable") else printer["last_seen_at"], result.get("error"), NOW(), printer_id))
+        return jsonify({"ok": True, **result})

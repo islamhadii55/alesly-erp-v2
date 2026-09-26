@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set title = "إدارة الطابعات والمهام" %}
+{% block actions %}<a class="btn btn-ghost" href="{{ url_for('settings') }}">الإعدادات</a>{% endblock %}
+{% block content %}
+<div class="split">
+  <div class="panel">
+    <div class="panel-h"><h3>إضافة ملف طابعة</h3><span class="badge b-open">قوالب</span></div>
+    <div class="panel-b">
+      <form id="profile-form" class="form-grid">
+        <div class="field"><label>اسم الملف</label><input name="name" placeholder="حراري 80 مم" required></div>
+        <div class="field"><label>النوع</label><select name="kind"><option value="thermal">حرارية</option><option value="barcode">باركود</option><option value="invoice">فواتير</option></select></div>
+        <div class="field"><label>تنسيق الإرسال</label><select name="payload_format"><option value="esc_pos">ESC/POS</option><option value="zpl">ZPL</option><option value="tspl">TSPL</option><option value="pdf">PDF</option><option value="raw">RAW</option></select></div>
+        <div class="field"><label>عرض الورق مم</label><input name="paper_width_mm" type="number" value="80"></div>
+        <div class="field"><label>عرض الملصق مم</label><input name="label_width_mm" type="number"></div>
+        <div class="field"><label>ارتفاع الملصق مم</label><input name="label_height_mm" type="number"></div>
+        <div class="actions"><button class="btn btn-gold">حفظ الملف</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>إضافة طابعة</h3><span class="badge b-credit">مدير فقط</span></div>
+    <div class="panel-b">
+      <form id="printer-form" class="form-grid">
+        <div class="field"><label>اسم الطابعة</label><input name="name" placeholder="كاشير 01" required></div>
+        <div class="field"><label>الكود</label><input name="code" placeholder="POS-01" required></div>
+        <div class="field"><label>ملف الطابعة</label><select name="profile_id" required><option value="">اختر الملف</option>{% for p in profiles %}<option value="{{ p.id }}">{{ p.name }} — {{ p.kind }}</option>{% endfor %}</select></div>
+        <div class="field"><label>الاتصال</label><select name="connection" id="printer-connection"><option value="network">شبكة TCP/IP</option><option value="usb">USB</option><option value="windows">Windows Spooler</option><option value="browser">المتصفح</option></select></div>
+        <div class="field"><label>العنوان الشبكي</label><input name="address" placeholder="192.168.1.50"></div>
+        <div class="field"><label>المنفذ</label><input name="port" type="number" value="9100"></div>
+        <div class="field"><label>اسم Windows</label><input name="windows_printer_name" placeholder="POS-80"></div>
+        <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" name="is_default"> افتراضية لهذا الملف</label>
+        <div class="actions"><button class="btn btn-gold">حفظ الطابعة</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+  <div class="panel-h"><h3>الطابعات المسجلة</h3><span class="muted">اختبار الاتصال لا يرسل مهمة طباعة</span></div>
+  <div class="panel-b">
+    <table><tr><th>الاسم</th><th>النوع</th><th>الاتصال</th><th>العنوان</th><th>الحالة</th><th>الافتراضية</th><th></th></tr>
+      {% for p in printers %}<tr id="printer-row-{{ p.id }}"><td><b>{{ p.name }}</b><br><small class="muted">{{ p.code }}</small></td><td>{{ {'thermal':'حرارية','barcode':'باركود','invoice':'فواتير'}.get(p.kind,p.kind) }}</td><td>{{ p.connection }}</td><td>{{ p.address or p.windows_printer_name or '—' }}{% if p.port %}:{{ p.port }}{% endif %}</td><td><span class="badge {% if p.status=='active' %}b-paid{% elif p.status=='error' %}b-void{% else %}b-open{% endif %}">{{ p.status }}</span></td><td>{% if p.is_default %}<span class="badge b-credit">نعم</span>{% else %}—{% endif %}</td><td class="actions"><button class="btn btn-ghost" onclick="testPrinter({{ p.id }})">اختبار</button>{% if not p.is_default %}<button class="btn btn-navy" onclick="makeDefault({{ p.id }})">تعيين افتراضية</button>{% endif %}</td></tr>{% else %}<tr><td colspan="7" class="muted">لا توجد طابعات بعد. أضف ملفًا ثم طابعة.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="split" style="margin-top:14px">
+  <div class="panel">
+    <div class="panel-h"><h3>ربط المهام بالطابعات</h3></div>
+    <div class="panel-b">
+      <form id="assignment-form" class="form-grid">
+        <div class="field"><label>نوع المهمة</label><select name="job_type"><option value="receipt">إيصال</option><option value="barcode_label">ملصق باركود</option><option value="invoice">فاتورة</option><option value="report">تقرير</option></select></div>
+        <div class="field"><label>الطابعة</label><select name="printer_id" required>{% for p in printers %}<option value="{{ p.id }}">{{ p.name }} — {{ p.kind }}</option>{% endfor %}</select></div>
+        <div class="field"><label>أولوية</label><input name="priority" type="number" value="100"></div>
+        <div class="actions"><button class="btn btn-gold">حفظ الربط</button></div>
+      </form>
+      <table style="margin-top:14px"><tr><th>المهمة</th><th>الطابعة</th><th>الأولوية</th></tr>{% for a in assignments %}<tr><td>{{ a.job_type }}</td><td>{{ a.printer_name }}</td><td>{{ a.priority }}</td></tr>{% else %}<tr><td colspan="3" class="muted">لا توجد روابط.</td></tr>{% endfor %}</table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>آخر مهام الطباعة</h3><button class="btn btn-ghost" onclick="location.reload()">تحديث</button></div>
+    <div class="panel-b"><table><tr><th>#</th><th>المهمة</th><th>الطابعة</th><th>الحالة</th><th>التاريخ</th></tr>{% for j in jobs %}<tr><td>{{ j.id }}</td><td>{{ j.job_type }}</td><td>{{ j.printer_name or '—' }}</td><td><span class="badge {% if j.status=='completed' %}b-paid{% elif j.status=='failed' %}b-void{% else %}b-open{% endif %}">{{ j.status }}</span></td><td>{{ j.created_at }}</td></tr>{% else %}<tr><td colspan="5" class="muted">لا توجد مهام.</td></tr>{% endfor %}</table></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function sendJson(url, data, method='POST') {
+  const response = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: data ? JSON.stringify(data) : undefined});
+  const result = await response.json().catch(() => ({error:'استجابة غير صالحة'}));
+  if (!response.ok || result.ok === false) throw new Error(result.error || 'تعذر تنفيذ العملية');
+  return result;
+}
+function formObject(form) { return Object.fromEntries(new FormData(form).entries()); }
+function notify(message) { window.alert(message); }
+document.getElementById('profile-form').addEventListener('submit', async function(e){ e.preventDefault(); try { await sendJson('/api/printer-profiles', formObject(this)); notify('تم حفظ ملف الطابعة'); location.reload(); } catch(err) { notify(err.message); } });
+document.getElementById('printer-form').addEventListener('submit', async function(e){ e.preventDefault(); try { const data=formObject(this); data.profile_id=Number(data.profile_id); data.port=Number(data.port || 9100); data.is_default=this.is_default.checked; data.status='active'; await sendJson('/api/printers', data); notify('تم حفظ الطابعة'); location.reload(); } catch(err) { notify(err.message); } });
+document.getElementById('assignment-form').addEventListener('submit', async function(e){ e.preventDefault(); try { const data=formObject(this); data.printer_id=Number(data.printer_id); data.priority=Number(data.priority || 100); await sendJson('/api/printer-assignments', data); notify('تم حفظ الربط'); location.reload(); } catch(err) { notify(err.message); } });
+async function testPrinter(id){ try { const result=await sendJson('/api/printers/'+id+'/test'); notify(result.reachable ? 'الاتصال ناجح ('+(result.response_ms||0)+'ms)' : 'فشل الاتصال: '+(result.error||'غير معروف')); location.reload(); } catch(err) { notify(err.message); } }
+async function makeDefault(id){ try { await sendJson('/api/printers/'+id+'/default'); notify('تم تعيين الطابعة الافتراضية'); location.reload(); } catch(err) { notify(err.message); } }
+</script>
+{% endblock %}

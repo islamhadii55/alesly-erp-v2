@@ -31,7 +31,7 @@
         {% if can('reports') %}<a class="{{ nav_active('reports') }}" href="{{ url_for('reports') }}" title="التقارير"><span>▥</span> التقارير</a>{% endif %}
         {% if can('parties') %}<a href="{{ url_for('customers') }}" title="العملاء"><span>♙</span> العملاء</a>{% endif %}
         <div class="quick-nav-divider"></div>
-        {% if can('branches') %}<a href="{{ url_for('branches') }}" title="الفروع"><span>⌘</span> الفروع</a>{% endif %}{% if role == 'مدير' %}<a href="{{ url_for('settings') }}" title="الإعدادات"><span>⚙</span> الإعدادات</a>{% endif %}
+        {% if can('branches') %}<a href="{{ url_for('branches') }}" title="الفروع"><span>⌘</span> الفروع</a>{% endif %}{% if role == 'مدير' %}<a href="{{ url_for('settings') }}" title="الإعدادات"><span>⚙</span> الإعدادات</a><a href="{{ url_for('printer_management') }}" title="إدارة الطابعات"><span>▤</span> إدارة الطابعات</a>{% endif %}
         <a href="{{ url_for('logout') }}" title="تسجيل الخروج"><span>↪</span> تسجيل الخروج</a>
       </nav>
       <div class="sidebar-footer"><b>نظام الأصلي ERP</b><small>إدارة أدق لقطع الغيار</small></div>

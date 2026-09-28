@@ -30,6 +30,18 @@
   </div>
 </div>
 <div class="panel" style="margin-bottom:14px">
+  <div class="panel-h"><h3>تسعير حسب نسبة الربح</h3><span class="badge b-credit">للمدير</span></div>
+  <div class="panel-b">
+    <form method="post" action="{{ url_for('inventory_profit_margin') }}" class="form-grid" id="margin-form">
+      <div class="field"><label>تطبيق النسبة على</label><select name="scope" id="margin-scope"><option value="all">كامل المخزون</option><option value="product">صنف محدد</option></select></div>
+      <div class="field" id="margin-product-field" style="display:none"><label>الصنف</label><select name="product_id"><option value="">اختر الصنف</option>{% for p in rows %}<option value="{{ p.id }}">{{ p.sku }} — {{ p.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>نسبة الربح %</label><input name="profit_margin" type="number" step="0.01" min="0" max="1000" placeholder="مثال: 25" required></div>
+      <div class="actions"><button class="btn btn-gold" onclick="return confirmMarginApply()">تطبيق النسبة وتحديث سعر البيع</button></div>
+    </form>
+    <small class="muted">يُحسب سعر البيع من تكلفة الشراء الحالية: سعر البيع = التكلفة × (1 + نسبة الربح ÷ 100). لا يغيّر ذلك تكلفة الشراء أو الكمية.</small>
+  </div>
+</div>
+<div class="panel" style="margin-bottom:14px">
   <div class="panel-h"><h3>{{ 'تعديل صنف' if edit else 'إضافة صنف للمخزون' }}</h3>
     <form method="get"><input name="q" value="{{ q or '' }}" data-suggest="product" placeholder="اكتب حرفاً لإظهار الأصناف"><button class="btn btn-ghost">بحث</button></form>
   </div>
@@ -63,6 +75,7 @@
       </div>
       <div class="field"><label>تكلفة الشراء</label><input name="cost" type="number" step="0.01" value="{{ edit.cost if edit else 0 }}"></div>
       <div class="field"><label>سعر البيع</label><input name="price" type="number" step="0.01" value="{{ edit.price if edit else 0 }}"></div>
+      <div class="field"><label>نسبة الربح %</label><input name="profit_margin" type="number" step="0.01" min="0" max="1000" value="{{ edit.profit_margin if edit and edit.profit_margin else '' }}" placeholder="اختياري؛ يحسب السعر تلقائيًا"></div>
       <div class="field"><label>الكمية</label><input name="qty" type="number" step="0.01" value="{{ edit.qty if edit else 0 }}"></div>
       <div class="field"><label>حد إعادة الطلب</label><input name="min_qty" type="number" step="0.01" value="{{ edit.min_qty if edit else 2 }}"></div>
       <div class="field full"><label>مكان الصنف داخل المخزن</label><small class="muted">حدد مكان الصنف هنا ضمن إعداداته؛ سيظهر في البحث وكارت الصنف.</small></div>
@@ -90,6 +103,7 @@
             <th>سعر الشراء</th>
             <th>أقل سعر بيع</th>
             <th>سعر البيع</th>
+            <th>الربح %</th>
             <th>متوسط الشراء</th>
             <th>متوسط البيع</th>
             <th>القيمة الإجمالية</th>
@@ -111,6 +125,7 @@
             <td class="inv-money">ج.م {{ r.cost|money }}</td>
             <td class="inv-money">{% if st and st.min_sale %}ج.م {{ st.min_sale|money }}{% else %}-{% endif %}</td>
             <td class="inv-money">ج.م {{ r.price|money }}</td>
+            <td class="inv-money">{{ r.profit_margin|money }}%</td>
             <td class="inv-money">{% if st and st.avg_purchase %}ج.م {{ st.avg_purchase|money }}{% else %}-{% endif %}</td>
             <td class="inv-money">{% if st and st.avg_sale %}ج.م {{ st.avg_sale|money }}{% else %}-{% endif %}</td>
             <td class="inv-money">ج.م {{ (r.qty * r.cost)|money }}</td>
@@ -243,4 +258,16 @@
     </div>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+const marginScope = document.getElementById('margin-scope');
+const marginProductField = document.getElementById('margin-product-field');
+if (marginScope) marginScope.addEventListener('change', () => { marginProductField.style.display = marginScope.value === 'product' ? '' : 'none'; });
+function confirmMarginApply() {
+  const scope = marginScope.value === 'all' ? 'كامل المخزون' : 'الصنف المحدد';
+  const value = document.querySelector('#margin-form [name="profit_margin"]').value;
+  return confirm(`سيتم تحديث أسعار البيع حسب نسبة ${value}% على ${scope}. هل تريد المتابعة؟`);
+}
+</script>
 {% endblock %}

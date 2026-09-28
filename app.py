@@ -1184,6 +1184,7 @@ def init_db():
             ("base_unit", "TEXT NOT NULL DEFAULT 'قطعة'"),
             ("serial_tracking", "INTEGER NOT NULL DEFAULT 0"),
             ("warehouse_id", "INTEGER"),
+            ("profit_margin", "REAL NOT NULL DEFAULT 0"),
         ),
     )
     ensure_columns(
@@ -2680,6 +2681,17 @@ def save_product_from_form():
     shelf = (request.form.get("shelf") or "").strip()
     bin_code = (request.form.get("bin") or "").strip()
     location = format_location(warehouse, aisle, shelf, bin_code) or (request.form.get("location") or "").strip()
+    try:
+        cost = float(request.form.get("cost") or 0)
+        entered_price = float(request.form.get("price") or 0)
+        margin_raw = (request.form.get("profit_margin") or "").strip()
+        margin = float(margin_raw) if margin_raw else 0
+        if margin < 0 or margin > 1000:
+            raise ValueError
+        price = round(cost * (1 + margin / 100), 2) if margin_raw else entered_price
+    except (TypeError, ValueError):
+        flash("نسبة الربح يجب أن تكون بين 0 و1000%، والأسعار أرقام صحيحة", "err")
+        return redirect(url_for("inventory"))
     data = (
         sku,
         request.form["name"].strip(),
@@ -2687,8 +2699,9 @@ def save_product_from_form():
         request.form.get("brand"),
         request.form.get("car_model"),
         request.form.get("unit") or "قطعة",
-        float(request.form.get("cost") or 0),
-        float(request.form.get("price") or 0),
+        cost,
+        price,
+        margin,
         float(request.form.get("qty") or 0),
         float(request.form.get("min_qty") or 2),
         location,
@@ -2708,7 +2721,7 @@ def save_product_from_form():
         if pid:
             execute(
                 """UPDATE products SET sku=?, name=?, category=?, brand=?, car_model=?, unit=?,
-                   cost=?, price=?, qty=?, min_qty=?, location=?, warehouse=?, aisle=?, shelf=?, bin=?,
+                   cost=?, price=?, profit_margin=?, qty=?, min_qty=?, location=?, warehouse=?, aisle=?, shelf=?, bin=?,
                    barcode=?, year_from=?, year_to=?, notes=?, item_type=?, base_unit=?, serial_tracking=? WHERE id=?""",
                 data + (pid,),
             )
@@ -2716,8 +2729,8 @@ def save_product_from_form():
             flash("تم تحديث الصنف", "ok")
         else:
             new_id = execute(
-                """INSERT INTO products (sku, name, category, brand, car_model, unit, cost, price, qty, min_qty, location, warehouse, aisle, shelf, bin, barcode, year_from, year_to, notes, item_type, base_unit, serial_tracking)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO products (sku, name, category, brand, car_model, unit, cost, price, profit_margin, qty, min_qty, location, warehouse, aisle, shelf, bin, barcode, year_from, year_to, notes, item_type, base_unit, serial_tracking)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 data,
             )
             audit_log("إنشاء", "صنف", new_id, sku, f"إضافة الصنف وموقعه: {location or 'غير محدد'}")
@@ -2816,6 +2829,38 @@ def inventory():
         counts=counts,
         stats=stats,
     )
+
+
+@app.post("/inventory/profit-margin")
+@login_required
+@admin_required
+def inventory_profit_margin():
+    scope = request.form.get("scope") or "all"
+    product_id = request.form.get("product_id")
+    try:
+        margin = float(request.form.get("profit_margin") or 0)
+        if margin < 0 or margin > 1000:
+            raise ValueError
+    except (TypeError, ValueError):
+        flash("نسبة الربح يجب أن تكون بين 0 و1000%", "err")
+        return redirect(url_for("inventory"))
+    if scope == "product":
+        if not product_id or not str(product_id).isdigit():
+            flash("اختر الصنف المطلوب أولًا", "err")
+            return redirect(url_for("inventory"))
+        product = query("SELECT id, name, sku FROM products WHERE id=?", (int(product_id),), one=True)
+        if not product:
+            flash("الصنف غير موجود", "err")
+            return redirect(url_for("inventory"))
+        execute("UPDATE products SET profit_margin=?, price=ROUND(cost*(1+?/100),2) WHERE id=?", (margin, margin, int(product_id)))
+        audit_log("تسعير", "صنف", product["id"], product["sku"], f"تطبيق هامش ربح {margin:g}% على {product['name']}")
+        flash(f"تم تطبيق هامش ربح {margin:g}% على الصنف المحدد", "ok")
+    else:
+        result = db().execute("UPDATE products SET profit_margin=?, price=ROUND(cost*(1+?/100),2)", (margin, margin))
+        db().commit()
+        audit_log("تسعير جماعي", "المخزون", None, None, f"تطبيق هامش ربح {margin:g}% على {result.rowcount} صنف")
+        flash(f"تم تطبيق هامش ربح {margin:g}% على {result.rowcount} صنف", "ok")
+    return redirect(url_for("inventory"))
 
 
 def barcode_pdf_response(products, quantities):

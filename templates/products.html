@@ -22,6 +22,7 @@
       <div class="field"><label>الوحدة</label><input name="unit" value="{{ edit.unit if edit else 'قطعة' }}"></div>
       <div class="field"><label>تكلفة الشراء</label><input name="cost" type="number" step="0.01" value="{{ edit.cost if edit else 0 }}"></div>
       <div class="field"><label>سعر البيع</label><input name="price" type="number" step="0.01" value="{{ edit.price if edit else 0 }}"></div>
+      <div class="field"><label>نسبة الربح %</label><input name="profit_margin" type="number" step="0.01" min="0" max="1000" value="{{ edit.profit_margin if edit and edit.profit_margin else '' }}" placeholder="اختياري؛ يحسب السعر تلقائيًا"></div>
       <div class="field"><label>الكمية</label><input name="qty" type="number" step="0.01" value="{{ edit.qty if edit else 0 }}"></div>
       <div class="field"><label>حد إعادة الطلب</label><input name="min_qty" type="number" step="0.01" value="{{ edit.min_qty if edit else 2 }}"></div>
       <div class="field"><label>المخزن</label><input name="warehouse" value="{{ edit.warehouse if edit else '' }}" data-suggest="warehouse" autocomplete="off" placeholder="الرئيسي / الفرعي"></div>
@@ -37,7 +38,7 @@
   <div class="panel-h"><h3>كتالوج القطع</h3></div>
   <div class="panel-b">
     <table class="filter-table">
-      <tr><th>الصنف</th><th>الاسم</th><th>التصنيف</th><th>الماركة</th><th>الموديل</th><th>المكان</th><th>كمية</th><th>تكلفة</th><th>بيع</th><th>هامش</th><th></th></tr>
+      <tr><th>الصنف</th><th>الاسم</th><th>التصنيف</th><th>الماركة</th><th>الموديل</th><th>المكان</th><th>كمية</th><th>تكلفة</th><th>بيع</th><th>هامش</th><th>الربح %</th><th></th></tr>
       {% for r in rows %}
       <tr>
         <td>{{ r.sku }}</td>
@@ -50,6 +51,7 @@
         <td class="money">{{ r.cost|money }}</td>
         <td class="money">{{ r.price|money }}</td>
         <td class="money up">{{ (r.price-r.cost)|money }}</td>
+        <td class="money">{{ r.profit_margin|money }}%</td>
         <td class="actions">
           <a class="btn btn-ghost" href="{{ url_for('products', edit=r.id) }}">تعديل</a>
           <a class="btn btn-danger" href="{{ url_for('delete_product', pid=r.id) }}" onclick="return confirm('حذف المنتج؟')">حذف</a>

@@ -1124,6 +1124,17 @@ def init_db():
         "address": "المملكة العربية السعودية",
         "tax_no": "",
         "print_footer": "شكراً لتعاملكم معنا — الأصلي لقطع الغيار",
+        "auto_receipt_print": "0",
+        "print_shop_name": "1",
+        "print_phone": "1",
+        "print_footer_enabled": "1",
+        "barcode_width_mm": "40",
+        "barcode_height_mm": "20",
+        "thermal_width_mm": "48",
+        "barcode_print_product_name": "1",
+        "barcode_print_shop_name": "1",
+        "barcode_print_sku": "1",
+        "barcode_print_price": "0",
         "paper_size": "A4",
         "show_cost": "0",
         "show_profit": "0",
@@ -3579,6 +3590,13 @@ def settings():
                 execute("DELETE FROM users WHERE id=?", (uid,))
                 flash("تم حذف المستخدم", "ok")
         elif action == "save_print":
+            paper_size = request.form.get("paper_size") or "A4"
+            if paper_size not in {"A4", "A5", "80mm"}:
+                paper_size = "A4"
+            try:
+                print_copies = min(20, max(1, int(request.form.get("print_copies") or 1)))
+            except (TypeError, ValueError):
+                print_copies = 1
             keys = (
                 "shop_name",
                 "shop_subtitle",
@@ -3586,6 +3604,13 @@ def settings():
                 "address",
                 "tax_no",
                 "print_footer",
+                "barcode_width_mm",
+                "barcode_height_mm",
+                "thermal_width_mm",
+                "barcode_print_product_name",
+                "barcode_print_shop_name",
+                "barcode_print_sku",
+                "barcode_print_price",
                 "paper_size",
                 "print_copies",
                 "auto_barcode_print",
@@ -3600,9 +3625,15 @@ def settings():
                 "device_name",
             )
             for key in keys:
+                value = request.form.get(key) if key in request.form else all_settings().get(key, "")
+                value = value or ""
+                if key == "paper_size":
+                    value = paper_size
+                elif key == "print_copies":
+                    value = str(print_copies)
                 execute(
                     "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (key, request.form.get(key) or ""),
+                    (key, value),
                 )
             logo_file = request.files.get("company_logo")
             if logo_file and logo_file.filename:
@@ -3614,21 +3645,32 @@ def settings():
                 else:
                     logo_data = "data:%s;base64,%s" % (logo_file.mimetype, base64.b64encode(raw_logo).decode("ascii"))
                     execute("INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", ("company_logo_data", logo_data))
+            current = all_settings()
             execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                ("show_cost", "1" if request.form.get("show_cost") else "0"),
+                ("show_cost", "1" if (request.form.get("show_cost") if "show_cost" in request.form else current.get("show_cost") == "1") else "0"),
             )
             execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                ("show_profit", "1" if request.form.get("show_profit") else "0"),
+                ("show_profit", "1" if (request.form.get("show_profit") if "show_profit" in request.form else current.get("show_profit") == "1") else "0"),
+            )
+            for key in ("auto_receipt_print", "print_shop_name", "print_phone", "print_footer_enabled"):
+                execute(
+                    "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (key, "1" if (request.form.get(key) if key in request.form else current.get(key) == "1") else "0"),
+                )
+            for key in ("barcode_print_product_name", "barcode_print_shop_name", "barcode_print_sku", "barcode_print_price"):
+                execute(
+                    "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (key, "1" if (request.form.get(key) if key in request.form else current.get(key) == "1") else "0"),
+                )
+            execute(
+                "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                ("auto_barcode_print", "1" if (request.form.get("auto_barcode_print") if "auto_barcode_print" in request.form else current.get("auto_barcode_print") == "1") else "0"),
             )
             execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                ("auto_barcode_print", "1" if request.form.get("auto_barcode_print") else "0"),
-            )
-            execute(
-                "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                ("sync_enabled", "1" if request.form.get("sync_enabled") else "0"),
+                ("sync_enabled", "1" if (request.form.get("sync_enabled") if "sync_enabled" in request.form else current.get("sync_enabled") == "1") else "0"),
             )
             flash("تم حفظ إعدادات الطباعة والمزامنة والشعار", "ok")
         return redirect(url_for("settings"))
@@ -3646,6 +3688,13 @@ def settings():
         settings=all_settings(),
         perm_groups=perm_groups,
     )
+
+
+@app.get("/print-settings")
+@login_required
+@admin_required
+def print_settings_page():
+    return render_template("print_settings.html", settings=all_settings())
 
 
 @app.route("/invoice/<int:inv_id>/print")

@@ -5,12 +5,18 @@
   <title>إيصال سداد {{ pay.receipt_no or pay.id }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <style>
+    @page {
+      size: {% if settings.get('paper_size')=='80mm' %}80mm auto{% elif settings.get('paper_size')=='A5' %}A5 portrait{% else %}A4 portrait{% endif %};
+      margin: {% if settings.get('paper_size')=='80mm' %}4mm{% else %}10mm{% endif %};
+    }
     body { background: #fff; }
-    .sheet { max-width: 720px; margin: 20px auto; padding: 18px; }
+    .sheet { width: 100%; max-width: {% if settings.get('paper_size')=='80mm' %}72mm{% elif settings.get('paper_size')=='A5' %}148mm{% else %}190mm{% endif %}; margin: 20px auto; padding: {% if settings.get('paper_size')=='80mm' %}3mm{% else %}8mm{% endif %}; box-sizing: border-box; }
+    .print-logo { content: url("{% if settings.get('company_logo_data') %}{{ settings.get('company_logo_data') }}{% else %}{{ url_for('static', filename='icons/icon-192.png') }}{% endif %}"); }
     @media print {
       .no-print { display: none !important; }
       body { background: #fff; }
-      .sheet { margin: 0; box-shadow: none; }
+      .sheet { max-width: none; margin: 0; box-shadow: none; border: 0; }
+      .inv-head { break-inside: avoid; }
     }
   </style>
 </head>
@@ -23,11 +29,11 @@
     <div class="print-book">{% if pay.party_type=='customer' %}إيصال سداد مديونية{% else %}سند صرف{% endif %}</div>
     <div class="inv-head">
       <div class="print-brand">
-        <img class="print-logo" src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="">
+        <img class="print-logo" src="{% if settings.get('company_logo_data') %}{{ settings.get('company_logo_data') }}{% else %}{{ url_for('static', filename='icons/icon-192.png') }}{% endif %}" alt="شعار الشركة">
         <div>
-          <h2 style="margin:0">{{ settings.get('shop_name', APP_NAME) }}</h2>
+          {% if settings.get('print_shop_name','1')=='1' %}<h2 style="margin:0">{{ settings.get('shop_name', APP_NAME) }}</h2>{% endif %}
           <div class="muted">{{ settings.get('shop_subtitle','') }}</div>
-          <div class="muted">{{ settings.get('address','') }} · {{ settings.get('phone','') }}</div>
+          <div class="muted">{{ settings.get('address','') }}{% if settings.get('print_phone','1')=='1' %} · {{ settings.get('phone','') }}{% endif %}</div>
         </div>
       </div>
       <div class="print-meta">
@@ -46,10 +52,10 @@
       <div>توقيع المحاسب</div>
       <div>توقيع العميل</div>
     </div>
-    <p style="text-align:center;margin-top:24px">{{ settings.get('print_footer','') }}</p>
+    {% if settings.get('print_footer_enabled','1')=='1' %}<p style="text-align:center;margin-top:24px">{{ settings.get('print_footer','') }}</p>{% endif %}
   </div>
-  <script>
+  {% if settings.get('auto_receipt_print')=='1' %}<script>
     window.addEventListener('load', function(){ window.print(); });
-  </script>
+  </script>{% endif %}
 </body>
 </html>

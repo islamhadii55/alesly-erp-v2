@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set title = "الإعدادات" %}
+{% block actions %}<a class="btn btn-gold" href="{{ url_for('print_settings_page') }}">إعدادات الإيصالات والطباعة</a>{% endblock %}
 {% block content %}
 <div class="split">
   <div class="panel">
@@ -112,15 +113,15 @@
         <div class="field" style="margin-bottom:10px"><label>الهاتف</label><input name="phone" value="{{ settings.get('phone','') }}"></div>
         <div class="field" style="margin-bottom:10px"><label>العنوان</label><input name="address" value="{{ settings.get('address','') }}"></div>
           <div class="field" style="margin-bottom:10px"><label>الرقم الضريبي</label><input name="tax_no" value="{{ settings.get('tax_no','') }}"></div>
-        <div class="field" style="margin-bottom:10px"><label>شعار الشركة في ملفات PDF</label><input type="file" name="company_logo" accept="image/png,image/jpeg,image/gif"><small class="muted">PNG أو JPG أو GIF — الحد الأقصى 2 ميجابايت. يظل الشعار الحالي محفوظًا إذا لم تختر ملفًا جديدًا.</small></div>
-        <div class="field" style="margin-bottom:10px"><label>حجم الورق</label>
+        <div class="field" style="margin-bottom:10px"><label>شعار الشركة في الطباعة وملفات PDF</label><input type="file" name="company_logo" accept="image/png,image/jpeg,image/gif"><small class="muted">PNG أو JPG أو GIF — الحد الأقصى 2 ميجابايت. يظل الشعار الحالي محفوظًا إذا لم تختر ملفًا جديدًا.</small></div>
+        <div class="field" style="margin-bottom:10px"><label>حجم الورق للطباعة والفواتير</label>
           <select name="paper_size">
             <option value="A4" {% if settings.get('paper_size')=='A4' %}selected{% endif %}>A4</option>
             <option value="A5" {% if settings.get('paper_size')=='A5' %}selected{% endif %}>A5</option>
             <option value="80mm" {% if settings.get('paper_size')=='80mm' %}selected{% endif %}>حراري 80مم</option>
           </select>
         </div>
-        <div class="field" style="margin-bottom:10px"><label>عدد النسخ</label><input type="number" min="1" name="print_copies" value="{{ settings.get('print_copies','1') }}"></div>
+        <div class="field" style="margin-bottom:10px"><label>عدد النسخ</label><input type="number" min="1" max="20" name="print_copies" value="{{ settings.get('print_copies','1') }}"><small class="muted">من 1 إلى 20 نسخة للمهام المدعومة بالطابعة الحرارية.</small></div>
         <label style="display:flex;gap:8px;align-items:center;margin:8px 0">
           <input type="checkbox" name="auto_barcode_print" {% if settings.get('auto_barcode_print','1')=='1' %}checked{% endif %}> طباعة ملصق الباركود تلقائيًا عند إضافة منتج
         </label>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set title = "إدارة الطابعات والمهام" %}
-{% block actions %}<a class="btn btn-ghost" href="{{ url_for('settings') }}">الإعدادات</a>{% endblock %}
+{% block actions %}<a class="btn btn-gold" href="{{ url_for('print_settings_page') }}">إعدادات الإيصالات</a><a class="btn btn-ghost" href="{{ url_for('settings') }}">الإعدادات</a>{% endblock %}
 {% block content %}
 <div class="split">
   <div class="panel">
@@ -36,7 +36,7 @@
 </div>
 
 <div class="panel" style="margin-top:14px">
-  <div class="panel-h"><h3>الطابعات المسجلة</h3><span class="muted">اختبار الاتصال لا يرسل مهمة طباعة</span></div>
+  <div class="panel-h"><h3>الطابعات المسجلة</h3><span class="muted">تتم مراقبة USB تلقائيًا كل 3 ثوانٍ — اختبار الاتصال لا يرسل مهمة طباعة</span></div>
   <div class="panel-b">
     <table><tr><th>الاسم</th><th>النوع</th><th>الاتصال</th><th>العنوان</th><th>الحالة</th><th>الافتراضية</th><th></th></tr>
       {% for p in printers %}<tr id="printer-row-{{ p.id }}"><td><b>{{ p.name }}</b><br><small class="muted">{{ p.code }}</small></td><td>{{ {'thermal':'حرارية','barcode':'باركود','invoice':'فواتير'}.get(p.kind,p.kind) }}</td><td>{{ p.connection }}</td><td>{{ p.address or p.windows_printer_name or '—' }}{% if p.port %}:{{ p.port }}{% endif %}</td><td><span class="badge {% if p.status=='active' %}b-paid{% elif p.status=='error' %}b-void{% else %}b-open{% endif %}">{{ p.status }}</span></td><td>{% if p.is_default %}<span class="badge b-credit">نعم</span>{% else %}—{% endif %}</td><td class="actions"><button class="btn btn-ghost" onclick="testPrinter({{ p.id }})">اختبار</button>{% if not p.is_default %}<button class="btn btn-navy" onclick="makeDefault({{ p.id }})">تعيين افتراضية</button>{% endif %}</td></tr>{% else %}<tr><td colspan="7" class="muted">لا توجد طابعات بعد. أضف ملفًا ثم طابعة.</td></tr>{% endfor %}

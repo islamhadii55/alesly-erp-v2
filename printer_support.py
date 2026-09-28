@@ -9,7 +9,8 @@ from datetime import datetime
 from typing import Any, Callable
 
 from flask import jsonify, render_template, request, session
-from printer_adapters import ThermalTCPAdapter
+from printer_adapters import ThermalTCPAdapter, UsbPrinterAdapter
+from printer_discovery import sync_usb_printers
 
 NOW = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -213,6 +214,12 @@ def register_printer_api(
                           ORDER BY pp.kind, p.name""", args)
         return jsonify({"ok": True, "printers": _rows(rows)})
 
+    @app.post("/api/printers/discover-usb")
+    @admin_required
+    def api_discover_usb_printers():
+        discovered = sync_usb_printers(connect_sqlite)
+        return jsonify({"ok": True, "discovered": discovered, "count": len(discovered)})
+
     @app.post("/api/printers")
     @admin_required
     def api_create_printer():
@@ -384,8 +391,10 @@ def register_printer_api(
                            WHERE p.id=?""", (printer_id,), one=True)
         if not printer:
             return jsonify({"ok": False, "error": "الطابعة غير موجودة"}), 404
-        if printer["connection"] != "network" or printer["kind"] != "thermal":
+        if printer["kind"] != "thermal" or printer["connection"] not in ("network", "usb"):
             result = {"reachable": False, "error": "adapter_not_configured_for_connection"}
+        elif printer["connection"] == "usb":
+            result = UsbPrinterAdapter().test_connection({"address": printer["address"], "windows_printer_name": printer["windows_printer_name"], "driver_options": _json(printer["driver_options"])})
         else:
             result = ThermalTCPAdapter().test_connection({"address": printer["address"], "port": printer["port"], "driver_options": _json(printer["driver_options"])})
         execute("INSERT INTO printer_health_checks(printer_id,is_reachable,response_ms,error_message,checked_at) VALUES (?,?,?,?,?)", (printer_id, int(result.get("reachable", False)), result.get("response_ms"), result.get("error"), NOW()))

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% set title = "إعدادات الإيصالات" %}
+{% block actions %}<a class="btn btn-ghost" href="{{ url_for('settings') }}">الإعدادات العامة</a><a class="btn btn-navy" href="{{ url_for('printer_management') }}">إدارة الطابعات</a>{% endblock %}
+{% block content %}
+<style>
+  .receipt-settings { max-width: 1180px; margin: 0 auto; color: #182230; }
+  .receipt-hero { background: #fff; border: 1px solid #e2e6eb; border-radius: 18px; padding: 28px 34px 0; box-shadow: 0 8px 24px rgba(15, 35, 55, .06); }
+  .receipt-hero h1 { text-align: right; font-size: 24px; margin-bottom: 24px; }
+  .receipt-fields { max-width: 760px; margin-right: auto; display: grid; gap: 12px; }
+  .receipt-field { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 18px; }
+  .receipt-field label { font-size: 15px; font-weight: 700; text-align: right; }
+  .receipt-field input, .receipt-field select { height: 48px; border: 1px solid #d5d9df; border-radius: 10px; padding: 0 16px; background: #fff; font-size: 14px; text-align: right; }
+  .receipt-toggles { margin: 28px -34px 0; padding: 22px 34px 26px; border-top: 1px solid #e4e8ed; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: center; }
+  .switch-row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; font-weight: 700; font-size: 14px; }
+  .switch-row input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch { width: 58px; height: 34px; border-radius: 22px; background: #cfd4da; position: relative; cursor: pointer; transition: .2s; flex: 0 0 auto; }
+  .switch:after { content: ""; position: absolute; width: 26px; height: 26px; top: 4px; right: 4px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #9da6af; transition: .2s; }
+  .switch-row input:checked + .switch { background: #4285e8; }
+  .switch-row input:checked + .switch:after { right: 28px; }
+  .receipt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+  .receipt-card { background: #fff; border: 1px solid #e2e6eb; border-radius: 18px; padding: 26px 34px 30px; box-shadow: 0 8px 24px rgba(15, 35, 55, .05); }
+  .receipt-card h2 { text-align: right; font-size: 21px; margin-bottom: 24px; }
+  .receipt-card .form-grid { gap: 14px; }
+  .receipt-card .field label { display: block; font-weight: 700; margin-bottom: 8px; font-size: 14px; }
+  .receipt-card input, .receipt-card select { width: 100%; height: 48px; border: 1px solid #d5d9df; border-radius: 10px; padding: 0 14px; background: #fff; }
+  .receipt-card .divider { border-top: 1px solid #e4e8ed; margin: 22px 0; }
+  .receipt-card .switch-row { justify-content: space-between; padding: 8px 0; }
+  .receipt-card .switch-row label { flex: 1; }
+  .usb-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 12px 14px; border-radius: 10px; background: #f3f7fc; color: #315275; font-size: 12px; }
+  .usb-dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; display: inline-block; margin-left: 7px; }
+  .usb-dot.online { background: #22a447; }
+  .save-bar { display: flex; justify-content: flex-start; gap: 10px; margin-top: 24px; }
+  @media (max-width: 900px) { .receipt-toggles, .receipt-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 620px) { .receipt-fields, .receipt-field { display: block; } .receipt-field label { display: block; margin: 8px 0; } .receipt-toggles, .receipt-grid { grid-template-columns: 1fr; } .receipt-hero, .receipt-card { padding: 20px; } .receipt-toggles { margin-left: -20px; margin-right: -20px; padding: 18px 20px; } }
+</style>
+<div class="receipt-settings">
+  <form method="post" action="{{ url_for('settings') }}" enctype="multipart/form-data" id="receipt-settings-form">
+    <input type="hidden" name="action" value="save_print">
+    <section class="receipt-hero">
+      <h1>إعدادات الإيصالات</h1>
+      <div class="receipt-fields">
+        <div class="receipt-field"><label for="shop_name">اسم المتجر</label><input id="shop_name" name="shop_name" value="{{ settings.get('shop_name','') }}"></div>
+        <div class="receipt-field"><label for="phone">رقم الهاتف</label><input id="phone" name="phone" value="{{ settings.get('phone','') }}"></div>
+        <div class="receipt-field"><label for="address">العنوان</label><input id="address" name="address" value="{{ settings.get('address','') }}"></div>
+      </div>
+      <div class="receipt-toggles">
+        <label class="switch-row"><input type="checkbox" name="print_footer_enabled" {% if settings.get('print_footer_enabled','1')=='1' %}checked{% endif %}><span class="switch"></span><span>رسالة الشكر النهائية</span></label>
+        <label class="switch-row"><input type="checkbox" name="print_phone" {% if settings.get('print_phone','1')=='1' %}checked{% endif %}><span class="switch"></span><span>تضمين الهاتف</span></label>
+        <label class="switch-row"><input type="checkbox" name="print_shop_name" {% if settings.get('print_shop_name','1')=='1' %}checked{% endif %}><span class="switch"></span><span>تضمين اسم المتجر</span></label>
+        <label class="switch-row"><input type="checkbox" name="auto_receipt_print" {% if settings.get('auto_receipt_print')=='1' %}checked{% endif %}><span class="switch"></span><span>طباعة الإيصال تلقائيًا</span></label>
+      </div>
+    </section>
+
+    <div class="receipt-grid">
+      <section class="receipt-card">
+        <h2>إعدادات الباركود</h2>
+        <div class="form-grid">
+          <div class="field"><label>عرض الباركود (مم)</label><input type="number" name="barcode_width_mm" value="{{ settings.get('barcode_width_mm','40') }}" min="10" max="100"></div>
+          <div class="field"><label>ارتفاع الباركود (مم)</label><input type="number" name="barcode_height_mm" value="{{ settings.get('barcode_height_mm','20') }}" min="5" max="100"></div>
+        </div>
+        <div class="divider"></div>
+        <label class="switch-row"><span>طباعة اسم المنتج</span><input type="checkbox" name="barcode_print_product_name" {% if settings.get('barcode_print_product_name','1')=='1' %}checked{% endif %}><span class="switch"></span></label>
+        <label class="switch-row"><span>طباعة اسم المتجر</span><input type="checkbox" name="barcode_print_shop_name" {% if settings.get('barcode_print_shop_name','1')=='1' %}checked{% endif %}><span class="switch"></span></label>
+        <label class="switch-row"><span>طباعة كود SKU</span><input type="checkbox" name="barcode_print_sku" {% if settings.get('barcode_print_sku','1')=='1' %}checked{% endif %}><span class="switch"></span></label>
+        <label class="switch-row"><span>طباعة السعر</span><input type="checkbox" name="barcode_print_price" {% if settings.get('barcode_print_price')=='1' %}checked{% endif %}><span class="switch"></span></label>
+      </section>
+
+      <section class="receipt-card">
+        <h2>خيارات الطباعة العامة</h2>
+        <div class="field"><label>الوضع الافتراضي للفواتير</label><select name="paper_size"><option value="A4" {% if settings.get('paper_size')=='A4' %}selected{% endif %}>ورق A4 (طابعة مكتبية)</option><option value="A5" {% if settings.get('paper_size')=='A5' %}selected{% endif %}>ورق A5</option><option value="80mm" {% if settings.get('paper_size')=='80mm' %}selected{% endif %}>ورق حراري 80 مم</option></select></div>
+        <div class="form-grid" style="margin-top:16px"><div class="field"><label>عرض الورق الحراري (مم)</label><input type="number" name="thermal_width_mm" value="{{ settings.get('thermal_width_mm','48') }}"></div><div class="field"><label>عدد النسخ</label><input type="number" name="print_copies" value="{{ settings.get('print_copies','1') }}" min="1" max="20"></div></div>
+        <div class="field" style="margin-top:16px"><label>رسالة الشكر النهائية</label><input name="print_footer" value="{{ settings.get('print_footer','') }}"></div>
+        <div class="field" style="margin-top:16px"><label>شعار المتجر</label><input type="file" name="company_logo" accept="image/png,image/jpeg,image/gif"></div>
+        <div class="usb-status"><span><i class="usb-dot" id="usb-dot"></i><span id="usb-status">جارٍ فحص اتصال USB...</span></span><button type="button" class="btn btn-ghost" id="scan-usb">فحص الآن</button></div>
+      </section>
+    </div>
+    <div class="save-bar"><button class="btn btn-navy" type="submit">حفظ الإعدادات</button><a class="btn btn-ghost" href="{{ url_for('printer_management') }}">إدارة الطابعات</a></div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function scanUsb() {
+  const status = document.getElementById('usb-status');
+  const dot = document.getElementById('usb-dot');
+  try {
+    const response = await fetch('/api/printers/discover-usb', {method:'POST'});
+    const result = await response.json();
+    if (!response.ok || result.ok === false) throw new Error(result.error || 'تعذر الفحص');
+    const count = result.count || 0;
+    status.textContent = count ? `تم اكتشاف ${count} طابعة USB وربطها تلقائيًا` : 'لم يتم اكتشاف طابعة USB حاليًا';
+    dot.classList.toggle('online', count > 0);
+  } catch (error) { status.textContent = error.message; dot.classList.remove('online'); }
+}
+document.getElementById('scan-usb').addEventListener('click', scanUsb);
+scanUsb();
+setInterval(scanUsb, 5000);
+</script>
+{% endblock %}

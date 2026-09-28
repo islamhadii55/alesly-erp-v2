@@ -11,7 +11,7 @@
     }
     body { background: #fff; }
     .sheet { width: 100%; max-width: {% if settings.get('paper_size')=='80mm' %}72mm{% elif settings.get('paper_size')=='A5' %}148mm{% else %}190mm{% endif %}; margin: 20px auto; padding: {% if settings.get('paper_size')=='80mm' %}3mm{% else %}8mm{% endif %}; box-sizing: border-box; }
-    .print-logo { content: url("{% if settings.get('company_logo_data') %}{{ settings.get('company_logo_data') }}{% else %}{{ url_for('static', filename='icons/icon-192.png') }}{% endif %}"); }
+    .print-logo { content: url("{% if settings.get('print_logo_url') %}{{ settings.get('print_logo_url') }}{% elif settings.get('company_logo_data') %}{{ settings.get('company_logo_data') }}{% else %}{{ url_for('static', filename='icons/icon-192.png') }}{% endif %}"); }
     @media print {
       .no-print { display: none !important; }
       body { background: #fff; }
@@ -29,7 +29,7 @@
     <div class="print-book">{% if pay.party_type=='customer' %}إيصال سداد مديونية{% else %}سند صرف{% endif %}</div>
     <div class="inv-head">
       <div class="print-brand">
-        <img class="print-logo" src="{% if settings.get('company_logo_data') %}{{ settings.get('company_logo_data') }}{% else %}{{ url_for('static', filename='icons/icon-192.png') }}{% endif %}" alt="شعار الشركة">
+        <img class="print-logo" src="{% if settings.get('print_logo_url') %}{{ settings.get('print_logo_url') }}{% elif settings.get('company_logo_data') %}{{ settings.get('company_logo_data') }}{% else %}{{ url_for('static', filename='icons/icon-192.png') }}{% endif %}" alt="شعار الشركة">
         <div>
           {% if settings.get('print_shop_name','1')=='1' %}<h2 style="margin:0">{{ settings.get('shop_name', APP_NAME) }}</h2>{% endif %}
           <div class="muted">{{ settings.get('shop_subtitle','') }}</div>

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% set title = KIND_LABELS[kind] %}
+{% from "_view_engine.html" import view_switcher %}
+{% set title = KIND_LABELS[kind] %}{% set current_view = request.args.get("view", "list") %}
 {% block actions %}
 <a class="btn btn-gold" href="{{ url_for('invoice_new', kind=kind) }}">مستند جديد</a>
 {% endblock %}
 {% block content %}
 <div class="panel">
-  <div class="panel-h"><div><h3>{{ KIND_LABELS[kind] }}</h3><div class="view-switcher" style="margin-top:8px"><a class="{{ 'active' if request.args.get('view','list')=='list' else '' }}" href="{{ url_for('invoices_list', kind=kind, view='list') }}">☷ قائمة</a><a class="{{ 'active' if request.args.get('view')=='kanban' else '' }}" href="{{ url_for('invoices_list', kind=kind, view='kanban') }}">▦ كانبان</a><a class="view-form-link" href="{{ url_for('invoice_new', kind=kind) }}">＋ نموذج</a></div></div>
+  <div class="panel-h"><div><h3>{{ KIND_LABELS[kind] }}</h3>{{ view_switcher(url_for('invoices_list', kind=kind, view='list'), url_for('invoices_list', kind=kind, view='kanban'), url_for('invoice_new', kind=kind), current_view, 'مستند جديد') }}</div>
     <input data-suggest="invoice" placeholder="بحث برقم الفاتورة أو اسم العميل">
   </div>
   <div class="panel-b">

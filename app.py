@@ -2586,7 +2586,8 @@ def dashboard():
     inv_series = query(
         """SELECT substr(date,1,7) m,
                   COALESCE(SUM(CASE WHEN kind IN ('sale','maintenance') THEN total END),0) sales,
-                  COALESCE(SUM(CASE WHEN kind='purchase' THEN total END),0) purchases
+                  COALESCE(SUM(CASE WHEN kind='purchase' THEN total END),0) purchases,
+                  COALESCE(SUM(CASE WHEN kind IN ('sale','maintenance') THEN profit END),0) profit
            FROM invoices WHERE status!='ملغاة' GROUP BY m ORDER BY m"""
     )
     moves_series = query(
@@ -2597,7 +2598,7 @@ def dashboard():
     )
     inv_map = {r["m"]: r for r in inv_series}
     move_map = {r["m"]: r for r in moves_series}
-    chart_labels, chart_sales, chart_purchases, chart_in, chart_out = [], [], [], [], []
+    chart_labels, chart_sales, chart_purchases, chart_profit, chart_in, chart_out = [], [], [], [], [], []
     now = datetime.now()
     for offset in range(11, -1, -1):
         y, m = now.year, now.month - offset
@@ -2610,6 +2611,7 @@ def dashboard():
         chart_labels.append(months_ar[m - 1])
         chart_sales.append(round(inv_row["sales"], 2) if inv_row else 0)
         chart_purchases.append(round(inv_row["purchases"], 2) if inv_row else 0)
+        chart_profit.append(round(inv_row["profit"], 2) if inv_row else 0)
         chart_in.append(round(move_row["stock_in"], 2) if move_row else 0)
         chart_out.append(round(move_row["stock_out"], 2) if move_row else 0)
 
@@ -2623,11 +2625,37 @@ def dashboard():
         "SELECT COALESCE(SUM(CASE WHEN transaction_type='وارد' THEN amount ELSE -amount END),0) v FROM cash_transactions",
         one=True,
     )["v"]
+    previous_month = (datetime.now().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    previous_sales = query(
+        "SELECT COALESCE(SUM(total),0) s FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?",
+        (previous_month + "%",), one=True,
+    )["s"]
+    month_invoice_count = query(
+        "SELECT COUNT(*) c FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?",
+        (month + "%",), one=True,
+    )["c"]
+    month_paid = query(
+        "SELECT COALESCE(SUM(paid),0) paid, COALESCE(SUM(total),0) total FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?",
+        (month + "%",), one=True,
+    )
+    sales_growth = ((float(month_sales["s"]) - float(previous_sales)) / float(previous_sales) * 100) if float(previous_sales) else 0
+    average_ticket = float(month_sales["s"]) / int(month_invoice_count or 1)
+    collection_rate = (float(month_paid["paid"]) / float(month_paid["total"]) * 100) if float(month_paid["total"]) else 0
+    gross_margin = (float(month_sales["p"]) / float(month_sales["s"]) * 100) if float(month_sales["s"]) else 0
+    job_pipeline = query("SELECT status, COUNT(*) c, COALESCE(SUM(total),0) total FROM job_cards GROUP BY status ORDER BY c DESC")
+    sales_by_employee = query(
+        """SELECT COALESCE(NULLIF(salesperson,''),'غير محدد') employee_name,
+                  COUNT(*) invoice_count, COALESCE(SUM(total),0) sales_total,
+                  COALESCE(SUM(profit),0) sales_profit
+           FROM invoices WHERE kind IN ('sale','maintenance') AND status!='ملغاة' AND date LIKE ?
+           GROUP BY salesperson ORDER BY sales_total DESC LIMIT 5""", (month + "%",)
+    )
 
     chart_data = {
         "labels": chart_labels,
         "sales": chart_sales,
         "purchases": chart_purchases,
+        "profit": chart_profit,
         "stockIn": chart_in,
         "stockOut": chart_out,
         "status": {
@@ -2666,6 +2694,14 @@ def dashboard():
         top_debtors=top_debtors,
         top_creditors=top_creditors,
         cash_balance=cash_balance,
+        previous_sales=previous_sales,
+        sales_growth=sales_growth,
+        month_invoice_count=month_invoice_count,
+        average_ticket=average_ticket,
+        collection_rate=collection_rate,
+        gross_margin=gross_margin,
+        job_pipeline=job_pipeline,
+        sales_by_employee=sales_by_employee,
         chart_data=chart_data,
         client_code=get_setting("client_code", "102"),
     )
@@ -3152,13 +3188,18 @@ def customers():
             sync_linked_party("customers", new_id, "suppliers", is_supplier, request.form, "is_customer")
             flash("تم إضافة العميل", "ok")
         return redirect(url_for("customers"))
-    rows = query("SELECT * FROM customers ORDER BY name")
+    q = request.args.get("q", "").strip()
+    if q:
+        like = f"%{q}%"
+        rows = query("SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? OR address LIKE ? OR tax_no LIKE ? ORDER BY name", (like, like, like, like))
+    else:
+        rows = query("SELECT * FROM customers ORDER BY name")
     edit = None
     if request.args.get("edit"):
         edit = query("SELECT * FROM customers WHERE id=?", (request.args["edit"],), one=True)
     return render_template(
         "parties.html", title="العملاء", endpoint="customers", rows=rows, edit=edit,
-        dual_label="يُعامل أيضاً كمورد (له حساب مشتريات)",
+        dual_label="يُعامل أيضاً كمورد (له حساب مشتريات)", q=q,
     )
 
 
@@ -3201,13 +3242,18 @@ def suppliers():
             sync_linked_party("suppliers", new_id, "customers", is_customer, request.form, "is_supplier")
             flash("تم إضافة المورد", "ok")
         return redirect(url_for("suppliers"))
-    rows = query("SELECT * FROM suppliers ORDER BY name")
+    q = request.args.get("q", "").strip()
+    if q:
+        like = f"%{q}%"
+        rows = query("SELECT * FROM suppliers WHERE name LIKE ? OR phone LIKE ? OR address LIKE ? OR tax_no LIKE ? ORDER BY name", (like, like, like, like))
+    else:
+        rows = query("SELECT * FROM suppliers ORDER BY name")
     edit = None
     if request.args.get("edit"):
         edit = query("SELECT * FROM suppliers WHERE id=?", (request.args["edit"],), one=True)
     return render_template(
         "parties.html", title="الموردون", endpoint="suppliers", rows=rows, edit=edit,
-        dual_label="يُعامل أيضاً كعميل (له حساب مبيعات)",
+        dual_label="يُعامل أيضاً كعميل (له حساب مبيعات)", q=q,
     )
 
 
@@ -4146,8 +4192,19 @@ def pos():
 @app.route("/jobs")
 @login_required
 def jobs():
-    rows = query("SELECT * FROM job_cards ORDER BY id DESC")
-    return render_template("jobs.html", rows=rows, statuses=JOB_STATUSES)
+    q = request.args.get("q", "").strip()
+    status = request.args.get("status", "").strip()
+    where, args = [], []
+    if q:
+        like = f"%{q}%"
+        where.append("(number LIKE ? OR customer_name LIKE ? OR plate LIKE ? OR vehicle_model LIKE ? OR technician_name LIKE ?)")
+        args.extend([like] * 5)
+    if status:
+        where.append("status=?")
+        args.append(status)
+    sql = "SELECT * FROM job_cards" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id DESC"
+    rows = query(sql, args)
+    return render_template("jobs.html", rows=rows, statuses=JOB_STATUSES, q=q, selected_status=status)
 
 
 @app.route("/jobs/new", methods=["GET", "POST"])

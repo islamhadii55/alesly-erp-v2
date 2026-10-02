@@ -1,0 +1,23 @@
+{# Reusable ERP Views: List / Kanban / Form #}
+{% macro view_switcher(list_url, kanban_url, form_url, active='list', form_label='نموذج') -%}
+<div class="view-switcher" role="tablist" aria-label="طريقة عرض البيانات">
+  <a class="{{ 'active' if active == 'list' else '' }}" href="{{ list_url }}" role="tab" aria-selected="{{ 'true' if active == 'list' else 'false' }}">☷ قائمة</a>
+  <a class="{{ 'active' if active == 'kanban' else '' }}" href="{{ kanban_url }}" role="tab" aria-selected="{{ 'true' if active == 'kanban' else 'false' }}">▦ كانبان</a>
+  <a class="{{ 'active' if active == 'form' else '' }}" href="{{ form_url }}" role="tab" aria-selected="{{ 'true' if active == 'form' else 'false' }}">＋ {{ form_label }}</a>
+</div>
+{%- endmacro %}
+
+{% macro status_badge(label, tone='neutral') -%}
+<span class="badge view-status view-status-{{ tone }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro kanban_card(url, title, meta='', status='', tone='neutral', facts=[]) -%}
+<a class="erp-kanban-card reusable-kanban-card" href="{{ url }}">
+  <div class="k-head"><div><h3>{{ title }}</h3>{% if meta %}<div class="k-meta">{{ meta }}</div>{% endif %}</div>{% if status %}{{ status_badge(status, tone) }}{% endif %}</div>
+  {% if facts %}<div class="k-facts">{% for fact in facts %}<span><small>{{ fact[0] }}</small><b>{{ fact[1] }}</b></span>{% endfor %}</div>{% endif %}
+</a>
+{%- endmacro %}
+
+{% macro empty_state(message='لا توجد بيانات لعرضها') -%}
+<div class="view-empty"><span>◌</span><strong>{{ message }}</strong><small>جرّب تغيير الفلتر أو أضف سجلاً جديداً.</small></div>
+{%- endmacro %}

@@ -1,30 +1,12 @@
 {% extends "base.html" %}
-{% set title = "أوامر الشغل - الورشة" %}
-{% block actions %}
-<a class="btn btn-gold" href="{{ url_for('job_new') }}">أمر شغل جديد</a>
-{% endblock %}
+{% from "_view_engine.html" import view_switcher, kanban_card, empty_state %}
+{% set title = "أوامر الشغل - الورشة" %}{% set current_view = request.args.get('view', 'list') %}
+{% block actions %}<a class="btn btn-gold" href="{{ url_for('job_new') }}">＋ أمر شغل جديد</a>{% endblock %}
 {% block content %}
-<div class="panel">
-  <div class="panel-h"><h3>تتبع حالة الإصلاح</h3></div>
-  <div class="panel-b">
-    <table>
-      <tr><th>الرقم</th><th>العميل</th><th>اللوحة</th><th>السيارة</th><th>العطل</th><th>الفني</th><th>الحالة</th><th>الإجمالي</th><th></th></tr>
-      {% for r in rows %}
-      <tr>
-        <td>{{ r.number }}</td>
-        <td>{{ r.customer_name }}</td>
-        <td>{{ r.plate }}</td>
-        <td>{{ r.vehicle_type }} {{ r.vehicle_model }}</td>
-        <td>{{ r.complaint }}</td>
-        <td>{{ r.technician_name }}</td>
-        <td><span class="badge {% if r.status=='تم التسليم' %}b-paid{% elif r.status=='جاري العمل' %}b-open{% elif r.status=='تم الإصلاح' %}b-credit{% else %}b-void{% endif %}">{{ r.status }}</span></td>
-        <td class="money">{{ r.total|money }}</td>
-        <td><a class="btn btn-ghost" href="{{ url_for('job_view', job_id=r.id) }}">فتح</a></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="9">لا أوامر شغل بعد.</td></tr>
-      {% endfor %}
-    </table>
-  </div>
-</div>
+<div class="view-toolbar"><div><span class="view-eyebrow">إدارة دورة الإصلاح</span><h3>أوامر الشغل</h3></div>{{ view_switcher(url_for('jobs', q=q or None, status=selected_status or None, view='list'), url_for('jobs', q=q or None, status=selected_status or None, view='kanban'), url_for('job_new', view='form'), current_view, 'أمر جديد') }}</div>
+<div class="panel jobs-filter"><div class="panel-b"><form class="filter-row" method="get"><div class="erp-search compact"><span>⌕</span><input name="q" value="{{ q or '' }}" placeholder="رقم الأمر، العميل، اللوحة أو الفني"></div><select name="status"><option value="">كل الحالات</option>{% for status in statuses %}<option value="{{ status }}" {% if selected_status==status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select><input type="hidden" name="view" value="{{ current_view }}"><button class="btn btn-ghost">تصفية</button>{% if q or selected_status %}<a class="btn" href="{{ url_for('jobs', view=current_view) }}">مسح</a>{% endif %}</form></div></div>
+<div class="panel"><div class="panel-h"><div><h3>سجل الورشة</h3><small class="muted">{{ rows|length }} أمر مطابق · دورة: انتظار → عمل → إصلاح → تسليم</small></div></div><div class="panel-b">
+{% if current_view == 'kanban' %}{% if rows %}<div class="erp-kanban">{% for r in rows %}{{ kanban_card(url_for('job_view', job_id=r.id), r.number, (r.customer_name or 'بدون عميل') ~ ' · ' ~ (r.plate or 'بدون لوحة'), r.status, 'success' if r.status=='تم التسليم' else ('info' if r.status=='تم الإصلاح' else ('warning' if r.status=='جاري العمل' else 'neutral')), [('السيارة', (r.vehicle_type or '') ~ ' ' ~ (r.vehicle_model or '')), ('الإجمالي', r.total|money)]) }}{% endfor %}</div>{% else %}{{ empty_state('لا توجد أوامر شغل مطابقة') }}{% endif %}
+{% else %}{% if rows %}<div class="table-scroll"><table><thead><tr><th>الرقم</th><th>العميل</th><th>اللوحة</th><th>السيارة</th><th>العطل</th><th>الفني</th><th>الحالة</th><th>الإجمالي</th><th></th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r.number }}</strong></td><td>{{ r.customer_name or '-' }}</td><td>{{ r.plate or '-' }}</td><td>{{ r.vehicle_type or '' }} {{ r.vehicle_model or '' }}</td><td>{{ r.complaint or '-' }}</td><td>{{ r.technician_name or '-' }}</td><td><span class="badge {% if r.status=='تم التسليم' %}b-paid{% elif r.status=='جاري العمل' %}b-open{% elif r.status=='تم الإصلاح' %}b-credit{% else %}b-void{% endif %}">{{ r.status }}</span></td><td class="money">{{ r.total|money }}</td><td><a class="btn btn-ghost" href="{{ url_for('job_view', job_id=r.id) }}">فتح</a></td></tr>{% endfor %}</tbody></table></div>{% else %}{{ empty_state('لا توجد أوامر شغل مطابقة') }}{% endif %}{% endif %}
+</div></div>
 {% endblock %}

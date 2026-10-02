@@ -122,6 +122,26 @@
       <strong class="kpi-card-value">{{ cash_balance|money }}</strong>
       <span class="kpi-card-sub">مشتريات الشهر {{ month_purchases.s|money }}</span>
     </article>
+    <article class="kpi-card kpi-card-analytic">
+      <span class="kpi-card-title">نمو المبيعات</span>
+      <strong class="kpi-card-value {% if sales_growth >= 0 %}kpi-success{% else %}kpi-danger{% endif %}">{{ '%+.1f'|format(sales_growth) }}%</strong>
+      <span class="kpi-card-sub">مقارنة بالشهر السابق · {{ previous_sales|money }}</span>
+    </article>
+    <article class="kpi-card kpi-card-analytic">
+      <span class="kpi-card-title">متوسط قيمة الفاتورة</span>
+      <strong class="kpi-card-value kpi-accent">{{ average_ticket|money }}</strong>
+      <span class="kpi-card-sub">من {{ month_invoice_count }} فاتورة مبيعات</span>
+    </article>
+    <article class="kpi-card kpi-card-analytic">
+      <span class="kpi-card-title">نسبة التحصيل</span>
+      <strong class="kpi-card-value">{{ collection_rate|round(1) }}%</strong>
+      <span class="kpi-card-sub">من إجمالي مبيعات الشهر</span>
+    </article>
+    <article class="kpi-card kpi-card-analytic">
+      <span class="kpi-card-title">هامش الربح الإجمالي</span>
+      <strong class="kpi-card-value kpi-success">{{ gross_margin|round(1) }}%</strong>
+      <span class="kpi-card-sub">ربح الشهر {{ month_sales.p|money }}</span>
+    </article>
   </section>
 
   <section class="analytical-middle-row">
@@ -133,7 +153,8 @@
           "labels": {{ chart_data['labels']|tojson }},
           "series": [
             {"name": "المبيعات والصيانة", "color": "#1976d2", "values": {{ chart_data['sales']|tojson }}},
-            {"name": "المشتريات", "color": "#0f766e", "values": {{ chart_data['purchases']|tojson }}}
+            {"name": "المشتريات", "color": "#0f766e", "values": {{ chart_data['purchases']|tojson }}},
+            {"name": "الربح", "color": "#b45309", "values": {{ chart_data['profit']|tojson }}, "area": false}
           ]
         }
         </script>
@@ -152,6 +173,18 @@
         }
         </script>
       </div>
+    </div>
+  </section>
+
+  <section class="analytical-insights-row">
+    <div class="chart-panel">
+      <div class="chart-panel-header"><span>أداء فريق المبيعات</span><small>الشهر الحالي</small></div>
+      <div class="insight-list">{% for r in sales_by_employee %}<div class="insight-row"><div class="insight-avatar">{{ loop.index }}</div><div class="insight-main"><strong>{{ r.employee_name }}</strong><small>{{ r.invoice_count }} فاتورة · ربح {{ r.sales_profit|money }}</small></div><b>{{ r.sales_total|money }}</b></div>{% else %}<div class="view-empty compact-empty"><strong>لا توجد مبيعات مسجلة هذا الشهر</strong></div>{% endfor %}</div>
+    </div>
+    <div class="chart-panel">
+      <div class="chart-panel-header"><span>مسار أوامر الشغل</span><a href="{{ url_for('jobs', view='kanban') }}">عرض كانبان</a></div>
+      <div class="pipeline-list">{% for r in job_pipeline %}<div class="pipeline-row"><span class="pipeline-label">{{ r.status }}</span><div class="pipeline-track"><i style="width:{{ ((r.c / (open_jobs or 1)) * 100)|round(0) }}%"></i></div><b>{{ r.c }}</b></div>{% else %}<div class="view-empty compact-empty"><strong>لا توجد أوامر شغل</strong></div>{% endfor %}</div>
+      <div class="pipeline-total">إجمالي قيمة الأوامر: <b>{{ (job_pipeline|sum(attribute='total'))|money }}</b></div>
     </div>
   </section>
 

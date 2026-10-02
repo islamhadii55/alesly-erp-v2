@@ -5,11 +5,11 @@
 {% endblock %}
 {% block content %}
 <div class="panel">
-  <div class="panel-h"><h3>{{ KIND_LABELS[kind] }}</h3>
+  <div class="panel-h"><div><h3>{{ KIND_LABELS[kind] }}</h3><div class="view-switcher" style="margin-top:8px"><a class="{{ 'active' if request.args.get('view','list')=='list' else '' }}" href="{{ url_for('invoices_list', kind=kind, view='list') }}">☷ قائمة</a><a class="{{ 'active' if request.args.get('view')=='kanban' else '' }}" href="{{ url_for('invoices_list', kind=kind, view='kanban') }}">▦ كانبان</a><a class="view-form-link" href="{{ url_for('invoice_new', kind=kind) }}">＋ نموذج</a></div></div>
     <input data-suggest="invoice" placeholder="بحث برقم الفاتورة أو اسم العميل">
   </div>
   <div class="panel-b">
-    <table>
+    {% if request.args.get('view') == 'kanban' %}<div class="erp-kanban">{% for r in rows %}<a class="erp-kanban-card" href="{{ url_for('invoice_view', inv_id=r.id) }}"><div class="k-head"><div><h3>{{ r.number }}</h3><div class="k-meta">{{ r.date }} · {{ r.party_name }}</div></div><span class="badge {% if r.status=='ملغاة' %}b-void{% elif r.status=='نقدي' %}b-paid{% else %}b-open{% endif %}">{{ r.status }}</span></div><div class="k-footer"><span>{{ KIND_LABELS.get(r.kind, r.kind) }}</span><b>{{ r.total|money }} ج.م</b></div></a>{% else %}<div class="panel-b"><p class="muted">لا توجد مستندات لعرضها.</p></div>{% endfor %}</div>{% else %}<table>
       <tr><th>الرقم</th><th>نوع الفاتورة</th><th>التاريخ</th><th>الطرف</th><th>الحالة</th><th>الإجمالي</th><th>المدفوع</th><th>التكلفة</th><th>الربح/الخسارة</th><th></th></tr>
       {% for r in rows %}
       <tr>
@@ -52,7 +52,7 @@
       {% else %}
       <tr><td colspan="10">لا توجد مستندات. أنشئ مستنداً جديداً.</td></tr>
       {% endfor %}
-    </table>
+    </table>{% endif %}
   </div>
 </div>
 {% endblock %}

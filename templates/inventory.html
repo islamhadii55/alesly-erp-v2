@@ -41,8 +41,8 @@
     <small class="muted">يُحسب سعر البيع من تكلفة الشراء الحالية: سعر البيع = التكلفة × (1 + نسبة الربح ÷ 100). لا يغيّر ذلك تكلفة الشراء أو الكمية.</small>
   </div>
 </div>
-<div class="panel" style="margin-bottom:14px">
-  <div class="panel-h"><h3>{{ 'تعديل صنف' if edit else 'إضافة صنف للمخزون' }}</h3>
+<div class="panel" style="margin-bottom:14px" id="product-form">
+  <div class="panel-h"><div><h3>{{ 'تعديل صنف' if edit else 'إضافة صنف للمخزون' }}</h3><div class="view-switcher" style="margin-top:8px"><a class="{{ 'active' if request.args.get('view','list')=='list' else '' }}" href="{{ url_for('inventory', q=q or None, view='list') }}">☷ قائمة</a><a class="{{ 'active' if request.args.get('view')=='kanban' else '' }}" href="{{ url_for('inventory', q=q or None, view='kanban') }}">▦ كانبان</a><a class="{{ 'active' if request.args.get('view')=='form' else '' }}" href="{{ url_for('inventory', q=q or None, view='form') }}#product-form">＋ نموذج</a></div></div>
     <form method="get"><input name="q" value="{{ q or '' }}" data-suggest="product" placeholder="اكتب حرفاً لإظهار الأصناف"><button class="btn btn-ghost">بحث</button></form>
   </div>
   <div class="panel-b">
@@ -89,7 +89,8 @@
     </form>
   </div>
 </div>
-<div class="split">
+{% if request.args.get('view', 'list') == 'kanban' %}<div class="erp-kanban" style="margin-bottom:14px">{% for r in rows %}<a class="erp-kanban-card" href="{{ url_for('inventory', edit=r.id, view='form') }}#product-form"><div class="k-head"><div><h3>{{ r.name }}</h3><div class="k-meta">{{ r.sku }} · {{ r.category or 'بدون تصنيف' }}</div></div><span class="status {{ 'status-out' if r.qty <= 0 else ('status-low' if r.qty <= r.min_qty else 'status-ok') }}">{{ 'نفد' if r.qty <= 0 else ('منخفض' if r.qty <= r.min_qty else 'متوفر') }}</span></div><div class="k-footer"><span>{{ r.qty }} {{ r.unit }}</span><b>{{ r.price|money }} ج.م</b></div></a>{% else %}<div class="panel-b"><p class="muted">لا توجد أصناف مطابقة.</p></div>{% endfor %}</div>{% endif %}
+{% if request.args.get('view', 'list') != 'kanban' %}<div class="split">
   <div class="panel">
       <div class="panel-h"><h3>أرصدة المخزن</h3>
         <input data-suggest="product" data-goto-product="1" placeholder="بحث ذكي في المخزون أو مكان الصنف...">
@@ -258,6 +259,7 @@
     </div>
   </div>
 </div>
+</div></div>{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>

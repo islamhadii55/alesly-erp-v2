@@ -87,6 +87,8 @@ PERMISSION_MODULES = (
     ("quotes", "عروض الأسعار", "المبيعات والورشة"),
     ("jobs", "أوامر الشغل", "المبيعات والورشة"),
     ("purchases", "فواتير الشراء ومرتجعاتها", "المشتريات"),
+    ("supply_chain", "أوامر الشراء وسلسلة الإمداد", "المشتريات"),
+    ("hr_payroll", "إدارة الموارد البشرية والرواتب", "الموارد البشرية"),
     ("inventory", "المخزون والأصناف", "المخزون والحسابات"),
     ("manufacturing", "التصنيع وأوامر الإنتاج", "المخزون والحسابات"),
     ("parties", "العملاء والموردون", "المخزون والحسابات"),
@@ -118,6 +120,12 @@ ENDPOINT_PERMISSIONS = {
     "attendance_mark": "attendance",
     "attendance": "attendance",
     "invoices_list": "invoices",
+    "supply_chain": "supply_chain",
+    "purchase_orders": "supply_chain",
+    "purchase_order_new": "supply_chain",
+    "purchase_order_status": "supply_chain",
+    "hr_dashboard": "hr_payroll",
+    "hr_profile": "hr_payroll",
     "invoice_new": "invoices",
     "invoice_view": "invoices",
     "invoice_print": "invoices",
@@ -1117,6 +1125,48 @@ def init_db():
         );
         """
     )
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT UNIQUE NOT NULL,
+            supplier_id INTEGER, supplier_name TEXT, order_date TEXT NOT NULL,
+            expected_date TEXT, status TEXT NOT NULL DEFAULT 'مسودة',
+            subtotal REAL NOT NULL DEFAULT 0, tax REAL NOT NULL DEFAULT 0,
+            total REAL NOT NULL DEFAULT 0, notes TEXT, created_by TEXT,
+            approved_by TEXT, received_at TEXT, branch_id INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+            product_id INTEGER, description TEXT NOT NULL, qty REAL NOT NULL DEFAULT 0,
+            received_qty REAL NOT NULL DEFAULT 0, unit_cost REAL NOT NULL DEFAULT 0, line_total REAL NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS supply_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, request_number TEXT UNIQUE NOT NULL,
+            product_id INTEGER, requested_qty REAL NOT NULL DEFAULT 0, min_qty REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'مقترح', priority TEXT NOT NULL DEFAULT 'عادي', created_at TEXT NOT NULL,
+            converted_order_id INTEGER, notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS employee_contracts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            contract_type TEXT NOT NULL DEFAULT 'دوام كامل', start_date TEXT NOT NULL, end_date TEXT,
+            basic_salary REAL NOT NULL DEFAULT 0, housing_allowance REAL NOT NULL DEFAULT 0,
+            transport_allowance REAL NOT NULL DEFAULT 0, insurance_deduction REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'ساري', notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS hr_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            document_type TEXT NOT NULL, document_number TEXT, expiry_date TEXT, status TEXT NOT NULL DEFAULT 'ساري', notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS payroll_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, period TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'مسودة',
+            employee_count INTEGER NOT NULL DEFAULT 0, gross_total REAL NOT NULL DEFAULT 0,
+            deductions_total REAL NOT NULL DEFAULT 0, net_total REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL, approved_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS employee_attendance_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL REFERENCES employees(id),
+            event_type TEXT NOT NULL, event_time TEXT NOT NULL, source TEXT DEFAULT 'يدوي', notes TEXT
+        );
+    """)
     defaults = {
         "shop_name": APP_NAME,
         "shop_subtitle": "تجارة قطع الغيار وخدمات صيانة السيارات",
@@ -4093,6 +4143,97 @@ def salaries():
     total = query("SELECT COALESCE(SUM(net),0) v FROM salaries", one=True)["v"]
     return render_template("salaries.html", rows=rows, emps=emps, previews=previews, total=total)
 
+
+
+@app.route("/supply-chain")
+@login_required
+def supply_chain():
+    period = request.args.get("status", "")
+    where = " WHERE status=?" if period else ""
+    args = [period] if period else []
+    orders = query("SELECT * FROM purchase_orders"+where+" ORDER BY id DESC LIMIT 100", args)
+    suggestions = query("""SELECT p.id,p.sku,p.name,p.qty,p.min_qty, (p.min_qty-p.qty) shortage
+                          FROM products p WHERE p.qty <= p.min_qty ORDER BY shortage DESC LIMIT 20""")
+    metrics = {
+        "draft": query("SELECT COUNT(*) v FROM purchase_orders WHERE status='مسودة'",one=True)["v"],
+        "open": query("SELECT COUNT(*) v FROM purchase_orders WHERE status IN ('معتمد','قيد الاستلام')",one=True)["v"],
+        "value": query("SELECT COALESCE(SUM(total),0) v FROM purchase_orders WHERE status NOT IN ('ملغى','مسودة')",one=True)["v"],
+        "shortages": len(suggestions),
+    }
+    return render_template("supply_chain.html", orders=orders, suggestions=suggestions, metrics=metrics, status=period)
+
+@app.route("/purchase-orders/new", methods=["GET","POST"])
+@login_required
+def purchase_order_new():
+    suppliers = query("SELECT * FROM suppliers ORDER BY name")
+    products = query("SELECT * FROM products ORDER BY name")
+    if request.method == "POST":
+        supplier_id = request.form.get("supplier_id") or None
+        supplier = query("SELECT name FROM suppliers WHERE id=?",(supplier_id,),one=True) if supplier_id else None
+        names=request.form.getlist("item_desc[]"); qtys=request.form.getlist("item_qty[]"); costs=request.form.getlist("item_cost[]"); pids=request.form.getlist("item_product_id[]")
+        items=[]; subtotal=0
+        for i, desc in enumerate(names):
+            if not desc.strip(): continue
+            q=float(qtys[i] or 0); c=float(costs[i] or 0); total=q*c; subtotal+=total
+            items.append((pids[i] or None,desc.strip(),q,c,total))
+        number=f"PO-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        cur=execute("""INSERT INTO purchase_orders(number,supplier_id,supplier_name,order_date,expected_date,status,subtotal,total,notes,created_by,branch_id)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(number,supplier_id,supplier["name"] if supplier else request.form.get("supplier_name"),request.form.get("order_date") or date.today().isoformat(),request.form.get("expected_date"),"مسودة",subtotal,subtotal,request.form.get("notes"),session.get("user"),current_branch_id()))
+        oid=cur if isinstance(cur, int) else cur.lastrowid
+        for pid,desc,q,c,total in items: execute("INSERT INTO purchase_order_items(order_id,product_id,description,qty,unit_cost,line_total) VALUES(?,?,?,?,?,?)",(oid,pid,desc,q,c,total))
+        flash("تم إنشاء أمر الشراء", "ok"); return redirect(url_for("supply_chain"))
+    return render_template("purchase_order_form.html", suppliers=suppliers, products=products, today=date.today().isoformat())
+
+@app.post("/purchase-orders/<int:oid>/status")
+@login_required
+def purchase_order_status(oid):
+    status=request.form.get("status") or "مسودة"
+    order=query("SELECT * FROM purchase_orders WHERE id=?",(oid,),one=True)
+    if not order: flash("أمر الشراء غير موجود","err"); return redirect(url_for("supply_chain"))
+    execute("UPDATE purchase_orders SET status=?, approved_by=? WHERE id=?",(status,session.get("user") if status in ("معتمد","قيد الاستلام") else None,oid))
+    if status == "مستلم" and order["status"] != "مستلم":
+        for it in query("SELECT * FROM purchase_order_items WHERE order_id=?",(oid,)):
+            execute("UPDATE purchase_order_items SET received_qty=qty WHERE id=?",(it["id"],))
+            if it["product_id"]:
+                execute("UPDATE products SET qty=qty+?, cost=? WHERE id=?",(it["qty"],it["unit_cost"],it["product_id"]))
+                execute("INSERT INTO stock_moves(product_id,qty,unit_cost,move_type,ref,date,notes,branch_id) VALUES(?,?,?,?,?,?,?,?)",(it["product_id"],it["qty"],it["unit_cost"],"استلام أمر شراء",order["number"],date.today().isoformat(),"استلام من أمر شراء",current_branch_id()))
+        execute("UPDATE purchase_orders SET received_at=? WHERE id=?",(date.today().isoformat(),oid))
+    flash("تم تحديث حالة أمر الشراء","ok"); return redirect(url_for("supply_chain"))
+
+@app.route("/hr")
+@login_required
+def hr_dashboard():
+    period=request.args.get("period") or datetime.now().strftime("%Y-%m")
+    metrics={"employees":query("SELECT COUNT(*) v FROM employees WHERE status='نشط'",one=True)["v"],"absent":query("SELECT COUNT(*) v FROM attendance WHERE status='غائب' AND attendance_date LIKE ?",(period+"%",),one=True)["v"],"payroll":query("SELECT COALESCE(SUM(net),0) v FROM salaries WHERE period=?",(period,),one=True)["v"],"expiring":query("SELECT COUNT(*) v FROM hr_documents WHERE expiry_date BETWEEN date('now') AND date('now','+60 day')",one=True)["v"]}
+    rows=query("SELECT e.*,c.contract_type,c.end_date FROM employees e LEFT JOIN employee_contracts c ON c.employee_id=e.id AND c.status='ساري' ORDER BY e.name")
+    return render_template("hr_dashboard.html", metrics=metrics, rows=rows, period=period)
+
+@app.post("/hr/contracts")
+@login_required
+def hr_contract():
+    execute("INSERT INTO employee_contracts(employee_id,contract_type,start_date,end_date,basic_salary,housing_allowance,transport_allowance,insurance_deduction,status,notes) VALUES(?,?,?,?,?,?,?,?,?,?)",(request.form["employee_id"],request.form.get("contract_type") or "دوام كامل",request.form.get("start_date") or date.today().isoformat(),request.form.get("end_date") or None,float(request.form.get("basic_salary") or 0),float(request.form.get("housing_allowance") or 0),float(request.form.get("transport_allowance") or 0),float(request.form.get("insurance_deduction") or 0),"ساري",request.form.get("notes")))
+    flash("تم حفظ عقد الموظف","ok"); return redirect(url_for("hr_dashboard"))
+
+@app.post("/hr/attendance-event")
+@login_required
+def hr_attendance_event():
+    eid=int(request.form["employee_id"]); typ=request.form.get("event_type") or "حضور"; stamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    execute("INSERT INTO employee_attendance_events(employee_id,event_type,event_time,source,notes) VALUES(?,?,?,?,?)",(eid,typ,stamp,"يدوي",request.form.get("notes")))
+    day=stamp[:10]; existing=query("SELECT id FROM attendance WHERE employee_id=? AND attendance_date=?",(eid,day),one=True)
+    if existing: execute("UPDATE attendance SET status=?,started_at=? WHERE id=?",("حاضر",stamp,existing["id"]))
+    else: execute("INSERT INTO attendance(employee_id,attendance_date,status,started_at,notes) VALUES(?,?,?,?,?)",(eid,day,"حاضر",stamp,request.form.get("notes")))
+    flash("تم تسجيل حدث الحضور","ok"); return redirect(url_for("hr_dashboard"))
+
+@app.post("/hr/payroll-run")
+@login_required
+def hr_payroll_run():
+    period=request.form.get("period") or datetime.now().strftime("%Y-%m")
+    emps=query("SELECT * FROM employees WHERE status='نشط'"); gross=deduct=net=0
+    for e in emps:
+        preview=attendance_preview(e["id"],period); base=float(e["salary"] or 0); d=float(preview["deduct"]); n=base-d; gross+=base; deduct+=d; net+=n
+        execute("INSERT INTO salaries(employee_id,period,base_salary,bonus,advance_deduct,net,status,paid_at,notes,attendance_deduct,absence_days,late_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",(e["id"],period,base,0,0,n,"مسودة",date.today().isoformat(),"مسيرة رواتب آلية",d,preview["absence_days"],preview["late_minutes"]))
+    execute("INSERT INTO payroll_runs(period,status,employee_count,gross_total,deductions_total,net_total,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(period) DO UPDATE SET employee_count=excluded.employee_count,gross_total=excluded.gross_total,deductions_total=excluded.deductions_total,net_total=excluded.net_total",(period,"مسودة",len(emps),gross,deduct,net,date.today().isoformat()))
+    flash("تم إنشاء مسيرة الرواتب للفترة "+period,"ok"); return redirect(url_for("hr_dashboard",period=period))
 
 @app.route("/costs")
 @login_required
